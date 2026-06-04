@@ -1,0 +1,16 @@
+[Unit]
+Description=Rolodex PocketBase
+After=network.target
+
+[Service]
+Type=simple
+# Change User/Group to your deploy user
+User=rolodex
+Group=rolodex
+WorkingDirectory=/opt/rolodex/pocketbase
+ExecStart=/opt/rolodex/pocketbase/pocketbase serve --http=127.0.0.1:8090
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target

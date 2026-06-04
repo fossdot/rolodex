@@ -1,0 +1,19 @@
+# PocketBase
+pocketbase/pocketbase
+pocketbase/pb_data/
+pocketbase/*.zip
+
+# Frontend
+frontend/node_modules/
+frontend/.svelte-kit/
+frontend/build/
+frontend/.env
+frontend/.env.local
+frontend/.env.*.local
+
+# Claude Code — may contain session credentials in allow lists
+.claude/
+
+# OS
+.DS_Store
+Thumbs.db

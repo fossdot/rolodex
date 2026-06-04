@@ -1,0 +1,20 @@
+[Unit]
+Description=Rolodex SvelteKit frontend
+After=network.target
+
+[Service]
+Type=simple
+# Change User/Group to your deploy user
+User=rolodex
+Group=rolodex
+WorkingDirectory=/opt/rolodex/frontend
+# PUBLIC_PB_URL must match your domain so browser requests go through Caddy
+Environment=PORT=3000
+Environment=HOST=127.0.0.1
+Environment=PUBLIC_PB_URL=https://YOUR_DOMAIN
+ExecStart=/usr/bin/node /opt/rolodex/frontend/build/index.js
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target

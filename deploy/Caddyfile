@@ -1,0 +1,17 @@
+# Replace YOUR_DOMAIN with your actual domain (e.g. rolodex.fossunited.org)
+YOUR_DOMAIN {
+    # Block PocketBase admin UI entirely.
+    # To access it: ssh -L 8090:localhost:8090 user@vps
+    # Then open: http://localhost:8090/_/
+    respond /_/* 403
+
+    # Proxy PocketBase API (browser SDK uses /api/*)
+    handle /api/* {
+        reverse_proxy 127.0.0.1:8090
+    }
+
+    # Proxy everything else to SvelteKit
+    handle {
+        reverse_proxy 127.0.0.1:3000
+    }
+}

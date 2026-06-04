@@ -1,8 +1,11 @@
 import PocketBase from 'pocketbase';
+import { env } from '$env/dynamic/public';
 
-const PB_URL = typeof window !== 'undefined'
-  ? (import.meta.env.PUBLIC_PB_URL || 'http://127.0.0.1:8090')
-  : 'http://127.0.0.1:8090';
+// $env/dynamic/public is resolved at RUNTIME on the Node server and shipped to
+// the browser — so PUBLIC_PB_URL from the systemd unit (or .env) works without
+// a rebuild. import.meta.env.PUBLIC_* does NOT work in SvelteKit (Vite only
+// exposes VITE_-prefixed vars there), which silently broke this before.
+const PB_URL = env.PUBLIC_PB_URL || 'http://127.0.0.1:8090';
 
 export const pb = new PocketBase(PB_URL);
 pb.autoCancellation(false);

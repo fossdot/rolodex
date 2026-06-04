@@ -7,8 +7,8 @@
   import Toasts from '$lib/components/Toasts.svelte';
   import '../app.css';
 
-  const publicRoutes = ['/login'];
-  $: isPublic = publicRoutes.includes($page.url.pathname);
+  const publicRoutes = ['/login', '/reset-password'];
+  $: isPublic = publicRoutes.some((r) => $page.url.pathname === r || $page.url.pathname.startsWith(r + '/'));
 
   onMount(() => {
     theme.init();

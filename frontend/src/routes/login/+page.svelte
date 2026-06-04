@@ -21,11 +21,21 @@
   let resendCooldown = 0;
   let cooldownTimer: ReturnType<typeof setInterval>;
 
+  // ── Forgot password state ────────────────────────────────────────────────────
+  let resetMode = false;
+  let resetEmail = '';
+  let resetLoading = false;
+  let resetSent = false;
+
   function getMfaId(e: unknown): string {
     return (e as { response?: { mfaId?: string } })?.response?.mfaId ?? '';
   }
 
   async function startOtpStep(targetEmail: string) {
+    if (!isAllowedDomain(targetEmail)) {
+      error = 'Only @fossunited.org email addresses can sign in.';
+      return;
+    }
     otpEmail = targetEmail;
     otpCode = '';
     error = '';
@@ -74,10 +84,54 @@
     clearInterval(cooldownTimer);
   }
 
+  function isAllowedDomain(addr: string): boolean {
+    return addr.trim().toLowerCase().endsWith('@fossunited.org');
+  }
+
+  // ── Forgot password ──────────────────────────────────────────────────────────
+  async function requestReset() {
+    if (!resetEmail.trim()) {
+      error = 'Enter your email address.';
+      return;
+    }
+    if (!isAllowedDomain(resetEmail)) {
+      error = 'Only @fossunited.org email addresses can be used.';
+      return;
+    }
+    resetLoading = true;
+    error = '';
+    try {
+      await pb.collection('users').requestPasswordReset(resetEmail.trim());
+    } catch {
+      // Deliberately ignore errors so the form doesn't reveal which
+      // emails exist — the success message is shown either way.
+    }
+    resetSent = true;
+    resetLoading = false;
+  }
+
+  function openReset() {
+    resetMode = true;
+    resetSent = false;
+    resetEmail = email;
+    error = '';
+  }
+
+  function cancelReset() {
+    resetMode = false;
+    resetSent = false;
+    resetEmail = '';
+    error = '';
+  }
+
   // ── Primary auth methods ─────────────────────────────────────────────────────
   async function login() {
     if (!email || !password) {
       error = 'Please enter your email and password.';
+      return;
+    }
+    if (!isAllowedDomain(email)) {
+      error = 'Only @fossunited.org email addresses can sign in.';
       return;
     }
     loading = true;
@@ -149,19 +203,74 @@
 
 <div class="min-h-screen bg-white dark:bg-neutral-950 flex flex-col">
   <!-- Top bar -->
-  <div class="flex justify-between items-center px-6 py-4">
-    <div class="flex items-center gap-3">
-      <img src="/logo-black.svg" alt="FOSS United" class="h-6 dark:hidden" />
-      <img src="/logo-white.svg" alt="FOSS United" class="h-6 hidden dark:block" />
-      <span class="text-xs text-neutral-400 dark:text-neutral-500 font-medium tracking-widest uppercase">Rolodex</span>
-    </div>
+  <div class="flex justify-end items-center px-6 py-4">
     <ThemeToggle />
   </div>
 
   <!-- Main content -->
   <div class="flex-1 flex items-center justify-center px-4">
     <div class="w-full max-w-sm animate-fade-in">
-      {#if mfaId}
+      <!-- Brand -->
+      <div class="flex items-center gap-3 mb-8">
+        <img src="/logo-black.svg" alt="FOSS United" class="h-8 dark:hidden" />
+        <img src="/logo-white.svg" alt="FOSS United" class="h-8 hidden dark:block" />
+        <span class="text-sm text-neutral-400 dark:text-neutral-500 font-medium tracking-widest uppercase">Rolodex</span>
+      </div>
+
+      {#if resetMode}
+        <!-- ── Forgot password ───────────────────────────────────────────────── -->
+        <div class="mb-8">
+          <h1 class="text-2xl font-semibold text-neutral-900 dark:text-neutral-50 tracking-tight">
+            Reset your password
+          </h1>
+          <p class="text-sm text-neutral-500 dark:text-neutral-400 mt-1">
+            {#if resetSent}
+              If an account exists for <span class="font-medium text-neutral-700 dark:text-neutral-300">{resetEmail}</span>, a reset link is on its way.
+            {:else}
+              Enter your email and we'll send you a reset link.
+            {/if}
+          </p>
+        </div>
+
+        <div class="space-y-4">
+          {#if !resetSent}
+            <div>
+              <label for="reset-email" class="label">Email</label>
+              <input
+                id="reset-email"
+                type="email"
+                bind:value={resetEmail}
+                on:keydown={(e) => e.key === 'Enter' && requestReset()}
+                class="input"
+                placeholder="you@fossunited.org"
+                autocomplete="email"
+                disabled={resetLoading}
+              />
+            </div>
+
+            {#if error}
+              <p class="text-sm text-red-600 dark:text-red-400">{error}</p>
+            {/if}
+
+            <button
+              on:click={requestReset}
+              disabled={resetLoading || !resetEmail.trim()}
+              class="btn-primary w-full py-2.5"
+            >
+              {#if resetLoading}
+                <div class="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin"></div>
+                Sending…
+              {:else}
+                Send reset link
+              {/if}
+            </button>
+          {/if}
+
+          <button on:click={cancelReset} class="w-full text-center text-xs text-neutral-500 dark:text-neutral-400 hover:text-neutral-700 dark:hover:text-neutral-200 py-1">
+            Back to login
+          </button>
+        </div>
+      {:else if mfaId}
         <!-- ── Step 2: email OTP ─────────────────────────────────────────────── -->
         <div class="mb-8">
           <h1 class="text-2xl font-semibold text-neutral-900 dark:text-neutral-50 tracking-tight">
@@ -257,10 +366,7 @@
       {:else}
         <!-- ── Step 1: credentials ───────────────────────────────────────────── -->
         <div class="mb-8">
-          <h1 class="text-2xl font-semibold text-neutral-900 dark:text-neutral-50 tracking-tight">
-            Sign in
-          </h1>
-          <p class="text-sm text-neutral-500 dark:text-neutral-400 mt-1">
+          <p class="text-sm text-neutral-500 dark:text-neutral-400">
             Internal access only · FOSS United staff
           </p>
         </div>
@@ -282,7 +388,16 @@
           </div>
 
           <div>
-            <label for="password" class="label">Password</label>
+            <div class="flex items-center justify-between">
+              <label for="password" class="label">Password</label>
+              <button
+                on:click={openReset}
+                class="text-xs text-neutral-500 dark:text-neutral-400 hover:text-accent dark:hover:text-accent-dark mb-1.5"
+                tabindex="-1"
+              >
+                Forgot password?
+              </button>
+            </div>
             <input
               id="password"
               type="password"
@@ -346,7 +461,7 @@
 
         <!-- Footer note -->
         <p class="text-xs text-neutral-400 dark:text-neutral-600 text-center mt-8">
-          Google sign-in is restricted to @fossunited.org accounts.
+          Sign-in is restricted to @fossunited.org accounts.
         </p>
       {/if}
     </div>

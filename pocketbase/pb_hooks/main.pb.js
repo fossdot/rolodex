@@ -10,6 +10,25 @@ onRecordAuthWithOAuth2Request((e) => {
     e.next();
 }, "users");
 
+// Restrict password sign-in to @fossunited.org emails only.
+onRecordAuthWithPasswordRequest((e) => {
+    const identity = String(e.identity ?? "");
+    if (!identity.endsWith("@fossunited.org")) {
+        throw new ForbiddenError("Only @fossunited.org accounts are permitted.");
+    }
+    e.next();
+}, "users");
+
+// Block creating users with non-@fossunited.org emails (applies to the
+// admin UI and any API path), so the restriction holds at the source.
+onRecordCreateRequest((e) => {
+    const email = String(e.record.get("email") ?? "");
+    if (!email.endsWith("@fossunited.org")) {
+        throw new ForbiddenError("User emails must be @fossunited.org.");
+    }
+    e.next();
+}, "users");
+
 // Force added_by = authenticated user, regardless of what the client sends.
 // Prevents attribution fraud and score gaming via the API.
 onRecordCreateRequest((e) => {

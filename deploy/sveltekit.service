@@ -11,7 +11,7 @@ WorkingDirectory=/opt/rolodex/frontend
 # PUBLIC_PB_URL must match your domain so browser requests go through Caddy
 Environment=PORT=3000
 Environment=HOST=127.0.0.1
-Environment=PUBLIC_PB_URL=https://YOUR_DOMAIN
+Environment=PUBLIC_PB_URL=https://rolodex.fossunited.org
 ExecStart=/usr/bin/node /opt/rolodex/frontend/build/index.js
 Restart=always
 RestartSec=5

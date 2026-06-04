@@ -1,5 +1,4 @@
-# Replace YOUR_DOMAIN with your actual domain (e.g. rolodex.fossunited.org)
-YOUR_DOMAIN {
+rolodex.fossunited.org {
     # Block PocketBase admin UI entirely.
     # To access it: ssh -L 8090:localhost:8090 user@vps
     # Then open: http://localhost:8090/_/

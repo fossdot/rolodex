@@ -191,9 +191,9 @@
     </div>
   </div>
 
-  <!-- Search + custom date range -->
-  <div class="flex items-end gap-3 mb-6 flex-wrap">
-    <div class="relative flex-1 max-w-md min-w-48">
+  <!-- Search + custom date range — stacks cleanly on phones, single row on larger screens -->
+  <div class="flex flex-col sm:flex-row sm:items-end sm:flex-wrap gap-3 mb-6">
+    <div class="relative w-full sm:w-auto sm:flex-1 sm:max-w-md sm:min-w-48">
       <svg class="absolute left-3 top-1/2 -translate-y-1/2 text-neutral-400" xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
         <circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/>
       </svg>
@@ -205,18 +205,20 @@
       />
     </div>
 
-    <div>
-      <label for="start-date" class="label">From</label>
-      <input id="start-date" type="date" bind:value={startDate} on:input={onDateInput} class="input" />
-    </div>
-    <div>
-      <label for="end-date" class="label">To</label>
-      <input id="end-date" type="date" bind:value={endDate} on:input={onDateInput} class="input" />
+    <div class="grid grid-cols-2 gap-3 sm:contents">
+      <div>
+        <label for="start-date" class="label">From</label>
+        <input id="start-date" type="date" bind:value={startDate} on:input={onDateInput} class="input w-full" />
+      </div>
+      <div>
+        <label for="end-date" class="label">To</label>
+        <input id="end-date" type="date" bind:value={endDate} on:input={onDateInput} class="input w-full" />
+      </div>
     </div>
     {#if isAdmin}
       <div>
         <label for="filter-user" class="label">Logged by</label>
-        <select id="filter-user" bind:value={filterUser} class="input min-w-40">
+        <select id="filter-user" bind:value={filterUser} class="input w-full sm:w-auto sm:min-w-40">
           <option value="">All users</option>
           {#each users as u (u.id)}
             <option value={u.id}>{u.name || u.email || u.id}</option>
@@ -225,7 +227,7 @@
       </div>
     {/if}
     {#if period === 'custom'}
-      <span class="badge-green mb-2.5">Custom range</span>
+      <span class="badge-green mb-2.5 self-start sm:self-auto">Custom range</span>
     {/if}
   </div>
 

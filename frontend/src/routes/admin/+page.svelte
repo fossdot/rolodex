@@ -3,7 +3,7 @@
   import { goto } from '$app/navigation';
   import { pb } from '$lib/pb';
   import { currentUser, toasts } from '$lib/stores';
-  import type { Activity, User, Contact } from '$lib/types';
+  import type { Activity, User } from '$lib/types';
   import { ACTIVITY_TYPES } from '$lib/constants';
   import Avatar from '$lib/components/Avatar.svelte';
 
@@ -15,7 +15,6 @@
 
   let recentActivities: Activity[] = [];
   let leaderboard: { user: User; contacts: number; activities: number; score: number }[] = [];
-  let deletedContacts: Contact[] = [];
 
   // Custom date range — empty inputs mean "all time". Contacts are filtered
   // by when they were added (created); activities by when they happened (date),
@@ -97,7 +96,7 @@
       const cRange = contactsRangeFilter();
       const aRange = activitiesRangeFilter();
 
-      const [contactsRes, activitiesRes, usersRes, recentRes, deletedRes] = await Promise.all([
+      const [contactsRes, activitiesRes, usersRes, recentRes] = await Promise.all([
         pb.collection('contacts').getList(1, 1, { filter: withRange('deleted_at = null', cRange) }),
         pb.collection('activities').getList(1, 1, { filter: withRange('deleted_at = null', aRange) }),
         pb.collection('users').getList<User>(1, 200),
@@ -106,18 +105,12 @@
           expand: 'logged_by,contact',
           filter: withRange('deleted_at = null', aRange),
         }),
-        pb.collection('contacts').getList<Contact>(1, 50, {
-          filter: 'deleted_at != null',
-          sort: '-deleted_at',
-          expand: 'deleted_by,added_by',
-        }),
       ]);
 
       totalContacts = contactsRes.totalItems;
       totalActivities = activitiesRes.totalItems;
       totalUsers = usersRes.totalItems;
       recentActivities = recentRes.items;
-      deletedContacts = deletedRes.items;
 
       // Build leaderboard over the same range
       const users = usersRes.items;
@@ -159,17 +152,6 @@
   }
 
   function getActivityLabel(v: string) { return ACTIVITY_TYPES.find((a) => a.value === v)?.label ?? v; }
-
-  async function restoreContact(contactId: string) {
-    try {
-      await pb.collection('contacts').update(contactId, { deleted_at: '', deleted_by: '' });
-      deletedContacts = deletedContacts.filter((c) => c.id !== contactId);
-      totalContacts += 1;
-      toasts.success('Contact restored');
-    } catch {
-      toasts.error('Failed to restore contact');
-    }
-  }
 
   function formatDate(d: string) {
     if (!d) return '—';
@@ -346,41 +328,6 @@
           </div>
         </div>
       </div>
-      {#if deletedContacts.length > 0}
-        <div class="mt-6">
-          <h2 class="text-sm font-semibold text-neutral-900 dark:text-neutral-100 mb-3">
-            Deleted Contacts
-            <span class="text-xs text-neutral-400 dark:text-neutral-500 font-normal ml-1">— soft-deleted, not visible to employees</span>
-          </h2>
-          <div class="card divide-y divide-neutral-100 dark:divide-neutral-800">
-            {#each deletedContacts as contact (contact.id)}
-              <div class="flex items-center gap-4 px-4 py-3">
-                <Avatar name={contact.name || contact.org || '?'} size="sm" />
-                <div class="flex-1 min-w-0">
-                  <a href="/contacts/{contact.id}" class="text-sm font-medium text-neutral-900 dark:text-neutral-100 hover:text-accent dark:hover:text-accent-dark transition-colors truncate block">
-                    {contact.name || '—'}
-                  </a>
-                  {#if contact.org}
-                    <p class="text-xs text-neutral-500 dark:text-neutral-400 truncate">{contact.org}</p>
-                  {/if}
-                </div>
-                <div class="text-right shrink-0 min-w-0">
-                  <p class="text-xs text-neutral-500 dark:text-neutral-400 truncate">
-                    by <span class="font-medium">{contact.expand?.deleted_by?.name || contact.expand?.deleted_by?.email || 'Unknown'}</span>
-                  </p>
-                  <p class="text-[11px] text-neutral-400 dark:text-neutral-500">{formatDate(contact.deleted_at ?? '')}</p>
-                </div>
-                <button
-                  on:click={() => restoreContact(contact.id)}
-                  class="btn-secondary text-xs py-1.5 shrink-0"
-                >
-                  Restore
-                </button>
-              </div>
-            {/each}
-          </div>
-        </div>
-      {/if}
     {/if}
   </div>
 {/if}

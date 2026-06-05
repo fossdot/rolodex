@@ -23,6 +23,34 @@
   let startDate = '';
   let endDate = '';
 
+  // Quick month picker — selecting a month fills From/To with its bounds.
+  // Editing the dates by hand clears the selection (range becomes custom).
+  let monthSel = '';
+
+  const MONTH_OPTIONS: { value: string; label: string }[] = (() => {
+    const opts = [];
+    const d = new Date();
+    d.setDate(1);
+    for (let i = 0; i < 36; i++) {
+      const value = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+      opts.push({ value, label: d.toLocaleDateString('en-IN', { month: 'long', year: 'numeric' }) });
+      d.setMonth(d.getMonth() - 1);
+    }
+    return opts;
+  })();
+
+  function applyMonth() {
+    if (!monthSel) return;
+    const [y, m] = monthSel.split('-').map(Number);
+    const lastDay = new Date(y, m, 0).getDate();
+    startDate = `${monthSel}-01`;
+    endDate = `${monthSel}-${String(lastDay).padStart(2, '0')}`;
+  }
+
+  function onManualDateInput() {
+    monthSel = '';
+  }
+
   function contactsRangeFilter() {
     const parts: string[] = [];
     if (startDate) parts.push(`created >= '${startDate} 00:00:00'`);
@@ -152,16 +180,25 @@
       <!-- Date range filter — drives the stats and the leaderboard -->
       <div class="flex items-end gap-3">
         <div>
+          <label for="admin-month" class="label">Month</label>
+          <select id="admin-month" bind:value={monthSel} on:change={applyMonth} class="input min-w-36">
+            <option value="">Pick a month…</option>
+            {#each MONTH_OPTIONS as m (m.value)}
+              <option value={m.value}>{m.label}</option>
+            {/each}
+          </select>
+        </div>
+        <div>
           <label for="admin-start" class="label">From</label>
-          <input id="admin-start" type="date" bind:value={startDate} class="input" />
+          <input id="admin-start" type="date" bind:value={startDate} on:input={onManualDateInput} class="input" />
         </div>
         <div>
           <label for="admin-end" class="label">To</label>
-          <input id="admin-end" type="date" bind:value={endDate} class="input" />
+          <input id="admin-end" type="date" bind:value={endDate} on:input={onManualDateInput} class="input" />
         </div>
         {#if startDate || endDate}
           <button
-            on:click={() => { startDate = ''; endDate = ''; }}
+            on:click={() => { startDate = ''; endDate = ''; monthSel = ''; }}
             class="btn-ghost text-xs py-2.5"
             title="Show all time"
           >

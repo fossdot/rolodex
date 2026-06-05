@@ -130,7 +130,7 @@
   </div>
 
   <!-- Search + Filter bar -->
-  <div class="flex items-center gap-3 mb-4">
+  <div class="flex items-center gap-3 mb-4 flex-wrap">
     <div class="relative flex-1 max-w-md">
       <svg class="absolute left-3 top-1/2 -translate-y-1/2 text-neutral-400" xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
         <circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/>
@@ -348,7 +348,7 @@
         <div class="flex items-center gap-4 px-4 py-3 {contact.deleted_at ? 'opacity-70' : 'hover:bg-neutral-50 dark:hover:bg-neutral-900'} transition-colors group">
           <a href="/contacts/{contact.id}" class="flex items-center gap-4 flex-1 min-w-0">
           <Avatar name={displayName(contact)} size="sm" src={photoUrl(contact, '100x100')} />
-          <div class="flex-1 min-w-0 grid grid-cols-4 gap-4 items-center">
+          <div class="flex-1 min-w-0 grid grid-cols-1 sm:grid-cols-4 gap-1 sm:gap-4 items-center">
             <div class="min-w-0 col-span-1">
               <div class="flex items-center gap-1.5">
                 <p class="text-sm font-medium text-neutral-900 dark:text-neutral-100 truncate group-hover:text-accent dark:group-hover:text-accent-dark transition-colors">
@@ -362,11 +362,11 @@
                 <p class="text-xs text-neutral-500 dark:text-neutral-400 truncate">{contact.org}</p>
               {/if}
             </div>
-            <p class="text-xs text-neutral-500 dark:text-neutral-400 truncate col-span-1">{contact.designation || '—'}</p>
-            <p class="text-xs text-neutral-500 dark:text-neutral-400 truncate col-span-1">
+            <p class="text-xs text-neutral-500 dark:text-neutral-400 truncate col-span-1 hidden sm:block">{contact.designation || '—'}</p>
+            <p class="text-xs text-neutral-500 dark:text-neutral-400 truncate col-span-1 hidden sm:block">
               {[contact.city, contact.country].filter(Boolean).join(', ') || '—'}
             </p>
-            <div class="flex flex-wrap gap-1 col-span-1">
+            <div class="hidden sm:flex flex-wrap gap-1 col-span-1">
               {#each (contact.fu_roles ?? []).slice(0, 2) as role}
                 <span class="badge-neutral">{roleBadge(contact, role)}</span>
               {/each}

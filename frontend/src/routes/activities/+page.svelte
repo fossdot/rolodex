@@ -177,7 +177,7 @@
     </div>
 
     <!-- Period toggle -->
-    <div class="flex border border-neutral-200 dark:border-neutral-700 rounded-lg overflow-hidden text-sm">
+    <div class="flex border border-neutral-200 dark:border-neutral-700 rounded-lg text-sm max-w-full overflow-x-auto">
       {#each PERIODS as [v, label]}
         <button
           on:click={() => setPeriod(v)}

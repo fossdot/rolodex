@@ -14,6 +14,10 @@
     theme.init();
   });
 
+  // Mobile navigation drawer — closes on any navigation
+  let mobileNavOpen = false;
+  $: $page.url.pathname, (mobileNavOpen = false);
+
   // Redirect logic
   $: if (typeof window !== 'undefined') {
     if (!$currentUser && !isPublic) {
@@ -28,8 +32,40 @@
   <slot />
 {:else if $currentUser}
   <div class="flex h-screen bg-white dark:bg-neutral-950 overflow-hidden">
-    <Sidebar />
-    <main class="flex-1 overflow-y-auto">
+    <!-- Desktop sidebar -->
+    <div class="hidden md:block shrink-0">
+      <Sidebar />
+    </div>
+
+    <!-- Mobile drawer -->
+    {#if mobileNavOpen}
+      <div class="fixed inset-0 z-50 md:hidden">
+        <!-- svelte-ignore a11y-click-events-have-key-events a11y-no-static-element-interactions -->
+        <div class="absolute inset-0 bg-black/40 animate-fade-in" on:click={() => (mobileNavOpen = false)}></div>
+        <div class="absolute left-0 top-0 h-full shadow-2xl animate-fade-in">
+          <Sidebar />
+        </div>
+      </div>
+    {/if}
+
+    <main class="flex-1 overflow-y-auto min-w-0">
+      <!-- Mobile top bar -->
+      <div class="md:hidden sticky top-0 z-40 bg-white/95 dark:bg-neutral-950/95 backdrop-blur border-b border-neutral-100 dark:border-neutral-800 flex items-center gap-3 px-4 py-3">
+        <button
+          on:click={() => (mobileNavOpen = true)}
+          class="btn-ghost p-2 -ml-2"
+          title="Menu"
+        >
+          <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <line x1="4" x2="20" y1="6" y2="6"/><line x1="4" x2="20" y1="12" y2="12"/><line x1="4" x2="20" y1="18" y2="18"/>
+          </svg>
+        </button>
+        <a href="/contacts" class="flex items-center gap-2">
+          <img src="/logo-black.svg" alt="FOSS United" class="h-5 dark:hidden" />
+          <img src="/logo-white.svg" alt="FOSS United" class="h-5 hidden dark:block" />
+          <span class="text-[10px] text-neutral-400 dark:text-neutral-500 font-medium tracking-widest uppercase">Rolodex</span>
+        </a>
+      </div>
       <slot />
     </main>
   </div>

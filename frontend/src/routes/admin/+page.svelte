@@ -17,23 +17,28 @@
   let leaderboard: { user: User; contacts: number; activities: number; score: number }[] = [];
   let deletedContacts: Contact[] = [];
 
-  let dateRange: 'week' | 'month' | 'year' | 'all' = 'month';
+  // Custom date range — empty inputs mean "all time". Contacts are filtered
+  // by when they were added (created); activities by when they happened (date),
+  // matching the Activities page.
+  let startDate = '';
+  let endDate = '';
 
-  const DATE_RANGES: ['week' | 'month' | 'year' | 'all', string][] = [
-    ['week', 'This week'],
-    ['month', 'This month'],
-    ['year', 'This year'],
-    ['all', 'All time'],
-  ];
+  function contactsRangeFilter() {
+    const parts: string[] = [];
+    if (startDate) parts.push(`created >= '${startDate} 00:00:00'`);
+    if (endDate) parts.push(`created <= '${endDate} 23:59:59'`);
+    return parts.join(' && ');
+  }
 
-  function getDateFilter(range: typeof dateRange) {
-    const now = new Date();
-    if (range === 'all') return '';
-    const d = new Date();
-    if (range === 'week') d.setDate(now.getDate() - 7);
-    else if (range === 'month') d.setMonth(now.getMonth() - 1);
-    else if (range === 'year') d.setFullYear(now.getFullYear() - 1);
-    return `created >= '${d.toISOString()}'`;
+  function activitiesRangeFilter() {
+    const parts: string[] = [];
+    if (startDate) parts.push(`date >= '${startDate} 00:00:00'`);
+    if (endDate) parts.push(`date <= '${endDate} 23:59:59'`);
+    return parts.join(' && ');
+  }
+
+  function withRange(base: string, range: string) {
+    return range ? `${base} && ${range}` : base;
   }
 
   async function load() {
@@ -43,18 +48,17 @@
     }
     loading = true;
     try {
-      const dateFilter = getDateFilter(dateRange);
-
-      const activeFilter = dateFilter ? `deleted_at = null && ${dateFilter}` : 'deleted_at = null';
+      const cRange = contactsRangeFilter();
+      const aRange = activitiesRangeFilter();
 
       const [contactsRes, activitiesRes, usersRes, recentRes, deletedRes] = await Promise.all([
-        pb.collection('contacts').getList(1, 1, { filter: activeFilter }),
-        pb.collection('activities').getList(1, 1, { filter: activeFilter }),
+        pb.collection('contacts').getList(1, 1, { filter: withRange('deleted_at = null', cRange) }),
+        pb.collection('activities').getList(1, 1, { filter: withRange('deleted_at = null', aRange) }),
         pb.collection('users').getList<User>(1, 200),
         pb.collection('activities').getList<Activity>(1, 15, {
-          sort: '-created',
+          sort: '-date,-created',
           expand: 'logged_by,contact',
-          filter: activeFilter,
+          filter: withRange('deleted_at = null', aRange),
         }),
         pb.collection('contacts').getList<Contact>(1, 50, {
           filter: 'deleted_at != null',
@@ -69,15 +73,17 @@
       recentActivities = recentRes.items;
       deletedContacts = deletedRes.items;
 
-      // Build leaderboard
+      // Build leaderboard over the same range
       const users = usersRes.items;
       const board = await Promise.all(
         users.map(async (u) => {
-          const userDateFilter = dateFilter ? `added_by = '${u.id}' && deleted_at = null && ${dateFilter}` : `added_by = '${u.id}' && deleted_at = null`;
-          const actDateFilter = dateFilter ? `logged_by = '${u.id}' && deleted_at = null && ${dateFilter}` : `logged_by = '${u.id}' && deleted_at = null`;
           const [c, a] = await Promise.all([
-            pb.collection('contacts').getList(1, 1, { filter: userDateFilter }),
-            pb.collection('activities').getList(1, 1, { filter: actDateFilter }),
+            pb.collection('contacts').getList(1, 1, {
+              filter: withRange(`added_by = '${u.id}' && deleted_at = null`, cRange),
+            }),
+            pb.collection('activities').getList(1, 1, {
+              filter: withRange(`logged_by = '${u.id}' && deleted_at = null`, aRange),
+            }),
           ]);
           return { user: u, contacts: c.totalItems, activities: a.totalItems, score: c.totalItems * 1 + a.totalItems * 2 };
         })
@@ -91,7 +97,20 @@
   }
 
   onMount(load);
-  $: dateRange, load();
+
+  let debounceTimer: ReturnType<typeof setTimeout>;
+  let initialised = false;
+  $: {
+    // debounce re-loads when the date inputs change (skip the initial run —
+    // onMount already loads)
+    startDate, endDate;
+    if (initialised) {
+      clearTimeout(debounceTimer);
+      debounceTimer = setTimeout(load, 300);
+    } else {
+      initialised = true;
+    }
+  }
 
   function getActivityLabel(v: string) { return ACTIVITY_TYPES.find((a) => a.value === v)?.label ?? v; }
 
@@ -123,23 +142,32 @@
 {:else}
   <div class="px-6 py-6 max-w-6xl mx-auto">
     <!-- Header -->
-    <div class="flex items-center justify-between mb-6">
+    <div class="flex items-end justify-between mb-6 flex-wrap gap-3">
       <div>
         <h1 class="text-xl font-semibold text-neutral-900 dark:text-neutral-50 tracking-tight">Dashboard</h1>
-        <p class="text-sm text-neutral-500 dark:text-neutral-400 mt-0.5">Network engagement overview</p>
+        <p class="text-sm text-neutral-500 dark:text-neutral-400 mt-0.5">
+          Network engagement {startDate || endDate ? 'in the selected period' : 'overview · all time'}
+        </p>
       </div>
-      <!-- Date range filter -->
-      <div class="flex border border-neutral-200 dark:border-neutral-700 rounded-lg overflow-hidden text-sm">
-        {#each DATE_RANGES as [v, label]}
+      <!-- Date range filter — drives the stats and the leaderboard -->
+      <div class="flex items-end gap-3">
+        <div>
+          <label for="admin-start" class="label">From</label>
+          <input id="admin-start" type="date" bind:value={startDate} class="input" />
+        </div>
+        <div>
+          <label for="admin-end" class="label">To</label>
+          <input id="admin-end" type="date" bind:value={endDate} class="input" />
+        </div>
+        {#if startDate || endDate}
           <button
-            on:click={() => (dateRange = v)}
-            class="px-3 py-2 transition-colors {dateRange === v
-              ? 'bg-neutral-900 dark:bg-white text-white dark:text-neutral-900 font-medium'
-              : 'text-neutral-500 dark:text-neutral-400 hover:bg-neutral-50 dark:hover:bg-neutral-800'}"
+            on:click={() => { startDate = ''; endDate = ''; }}
+            class="btn-ghost text-xs py-2.5"
+            title="Show all time"
           >
-            {label}
+            Clear
           </button>
-        {/each}
+        {/if}
       </div>
     </div>
 

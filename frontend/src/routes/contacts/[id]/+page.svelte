@@ -4,10 +4,11 @@
   import { goto } from '$app/navigation';
   import { pb, photoUrl } from '$lib/pb';
   import { currentUser, toasts } from '$lib/stores';
-  import type { Contact, Activity, User } from '$lib/types';
+  import type { Contact, Activity, Reaction, User } from '$lib/types';
   import { FU_ROLES, TOPICS, ACTIVITY_TYPES } from '$lib/constants';
   import Avatar from '$lib/components/Avatar.svelte';
   import Lightbox from '$lib/components/Lightbox.svelte';
+  import Reactions from '$lib/components/Reactions.svelte';
 
   let contact: Contact | null = null;
   let activities: Activity[] = [];
@@ -25,6 +26,26 @@
 
   $: id = $page.params.id ?? '';
 
+  let reactionsByActivity: Record<string, Reaction[]> = {};
+
+  async function loadReactions(activityIds: string[]) {
+    if (!activityIds.length) {
+      reactionsByActivity = {};
+      return;
+    }
+    try {
+      const all = await pb.collection('reactions').getFullList<Reaction>({
+        filter: activityIds.map((aid) => `activity = '${aid}'`).join(' || '),
+        expand: 'user',
+      });
+      const map: Record<string, Reaction[]> = {};
+      for (const r of all) (map[r.activity] ??= []).push(r);
+      reactionsByActivity = map;
+    } catch {
+      /* non-fatal — reactions just don't render */
+    }
+  }
+
   async function load() {
     loading = true;
     try {
@@ -36,6 +57,7 @@
           expand: 'logged_by,deleted_by',
         }).then((r) => r.items),
       ]);
+      loadReactions(activities.map((a) => a.id));
     } catch {
       toasts.error('Contact not found');
       goto('/contacts');
@@ -480,6 +502,11 @@
                       · <span class="text-red-400">deleted {formatDate(activity.deleted_at)}</span>
                     {/if}
                   </p>
+                  {#if !activity.deleted_at}
+                    <div class="mt-2">
+                      <Reactions activityId={activity.id} reactions={reactionsByActivity[activity.id] ?? []} />
+                    </div>
+                  {/if}
                 </div>
               </div>
             {/each}

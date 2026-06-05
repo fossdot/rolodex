@@ -2,9 +2,10 @@
   import { onMount } from 'svelte';
   import { pb } from '$lib/pb';
   import { currentUser, toasts } from '$lib/stores';
-  import type { Activity, Contact, User } from '$lib/types';
+  import type { Activity, Contact, Reaction, User } from '$lib/types';
   import { ACTIVITY_TYPES } from '$lib/constants';
   import Avatar from '$lib/components/Avatar.svelte';
+  import Reactions from '$lib/components/Reactions.svelte';
 
   type Period = 'week' | 'month' | 'quarter' | 'year' | 'all' | 'custom';
   let period: Period = 'month';
@@ -77,11 +78,39 @@
         expand: 'contact,logged_by',
       });
       activities = result.items;
+      loadReactions(activities.map((a) => a.id));
     } catch {
       toasts.error('Failed to load activities');
     } finally {
       loading = false;
     }
+  }
+
+  let reactionsByActivity: Record<string, Reaction[]> = {};
+
+  async function loadReactions(activityIds: string[]) {
+    if (!activityIds.length) {
+      reactionsByActivity = {};
+      return;
+    }
+    try {
+      const all = await pb.collection('reactions').getFullList<Reaction>({
+        filter: activityIds.map((aid) => `activity = '${aid}'`).join(' || '),
+        expand: 'user',
+      });
+      const map: Record<string, Reaction[]> = {};
+      for (const r of all) (map[r.activity] ??= []).push(r);
+      reactionsByActivity = map;
+    } catch {
+      /* non-fatal — reactions just don't render */
+    }
+  }
+
+  // compact summary for collapsed rows: unique emojis + total count
+  function reactionSummary(id: string): string {
+    const list = reactionsByActivity[id] ?? [];
+    if (!list.length) return '';
+    return `${[...new Set(list.map((r) => r.emoji))].join('')} ${list.length}`;
   }
 
   onMount(() => {
@@ -251,6 +280,9 @@
                           {/if}
                         </p>
                         <span class="text-xs text-neutral-400 dark:text-neutral-500 shrink-0 flex items-center gap-1.5">
+                          {#if reactionSummary(act.id)}
+                            <span class="text-[11px] bg-neutral-100 dark:bg-neutral-800 rounded-full px-1.5 py-0.5">{reactionSummary(act.id)}</span>
+                          {/if}
                           {formatDate(act.date)}
                           <svg class="transition-transform {expandedId === act.id ? 'rotate-180' : ''}" xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                             <path d="m6 9 6 6 6-6"/>
@@ -294,6 +326,12 @@
                             logged by {act.expand?.logged_by?.name || act.expand?.logged_by?.email || 'Unknown'}
                           </span>
                         </div>
+
+                        <Reactions
+                          activityId={act.id}
+                          reactions={reactionsByActivity[act.id] ?? []}
+                          on:change={(e) => (reactionsByActivity = { ...reactionsByActivity, [act.id]: e.detail })}
+                        />
                       </div>
                     </div>
                   {/if}

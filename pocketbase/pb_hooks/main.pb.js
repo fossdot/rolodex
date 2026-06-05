@@ -58,6 +58,24 @@ onRecordCreateRequest((e) => {
     e.next();
 }, "activities");
 
+// Reactions: force user = auth; re-reacting replaces the previous reaction
+// (WhatsApp behaviour) so the unique (activity, user) index never trips.
+onRecordCreateRequest((e) => {
+    if (!e.auth || e.auth.collection().name !== "users") {
+        throw new ForbiddenError("Reactions can only be added by app users.");
+    }
+    e.record.set("user", e.auth.id);
+
+    const existing = e.app.findRecordsByFilter("reactions",
+        "user = {:u} && activity = {:a}", "", 1, 0,
+        { u: e.auth.id, a: e.record.getString("activity") });
+    if (existing.length > 0) {
+        e.app.delete(existing[0]);
+    }
+
+    e.next();
+}, "reactions");
+
 // On contact update:
 //   - Lock added_by to its original value (can never be reassigned).
 //   - If soft-deleting (deleted_at set), stamp deleted_by with the caller.

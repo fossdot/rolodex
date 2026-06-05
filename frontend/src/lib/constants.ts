@@ -188,3 +188,6 @@ export const COUNTRIES = [
   'Germany', 'France', 'Singapore', 'UAE', 'Bangladesh', 'Sri Lanka',
   'Nepal', 'Pakistan', 'Other',
 ];
+
+// Must stay in sync with the reactions collection's emoji select values.
+export const REACTION_EMOJIS = ['👍', '❤️', '🎉', '👏', '💯', '🔥'];

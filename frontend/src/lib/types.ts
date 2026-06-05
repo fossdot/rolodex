@@ -37,6 +37,17 @@ export interface Contact {
   updated: string;
 }
 
+export interface Reaction {
+  id: string;
+  activity: string;
+  user: string;
+  emoji: string;
+  expand?: {
+    user?: User;
+  };
+  created: string;
+}
+
 export interface Activity {
   id: string;
   contact: string;

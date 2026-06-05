@@ -36,7 +36,7 @@ All access-control rules live in the PocketBase collection schema and are evalua
 | Action | Rule (server-enforced) |
 |---|---|
 | Read contacts / activities / reactions | Any authenticated staff member |
-| Create a contact or activity | Any authenticated employee |
+| Create a contact or activity | Any authenticated staff member (incl. admins) |
 | Edit a contact | Only the person who added it, or an admin |
 | Delete (soft) a contact | Only the owner or an admin |
 | Edit or delete an **activity** | **Nobody** — see immutability below |

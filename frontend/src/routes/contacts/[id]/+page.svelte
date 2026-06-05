@@ -136,9 +136,9 @@
   }
 
   $: canEditContact = contact && ($currentUser?.role === 'admin' || (!contact.deleted_at && $currentUser?.id === contact.added_by));
-  // Any employee can log activities on any contact — engagement is shared.
-  // (Admins are excluded: logging counts toward employee scores.)
-  $: canLogActivity = $currentUser?.role !== 'admin' && !contact?.deleted_at;
+  // Anyone signed in — employees and directors alike — can log activities
+  // on any contact. Engagement is shared; logged_by is forced to self.
+  $: canLogActivity = !!$currentUser && !contact?.deleted_at;
 
   // ── Photo lightbox ───────────────────────────────────────────────────────────
   // The full-size original is only assigned (and therefore fetched) on click.

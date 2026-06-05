@@ -21,6 +21,7 @@ export interface Contact {
   secondary_mobile: string;
   how_you_know: string;
   linkedin: string;
+  photo: string;
   fu_roles: string[];
   fu_roles_other: string;
   topics: string[];

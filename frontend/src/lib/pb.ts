@@ -15,3 +15,15 @@ pb.autoCancellation(false);
 if (typeof window !== 'undefined' && pb.authStore.isValid) {
   pb.collection('users').authRefresh().catch(() => pb.authStore.clear());
 }
+
+/**
+ * URL for a contact's photo. Pass a thumb (e.g. '100x100') for list views —
+ * omit it only when the full-size original is actually needed (lightbox).
+ */
+export function photoUrl(
+  record: { id: string; photo?: string; collectionId?: string; collectionName?: string },
+  thumb?: string
+): string {
+  if (!record.photo) return '';
+  return pb.files.getURL(record, record.photo, thumb ? { thumb } : {});
+}

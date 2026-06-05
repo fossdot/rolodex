@@ -1,6 +1,8 @@
 <script lang="ts">
   export let name: string = '';
   export let size: 'sm' | 'md' | 'lg' = 'md';
+  /** Optional photo URL — falls back to initials when empty or broken. */
+  export let src: string = '';
 
   const COLORS = [
     'bg-violet-100 text-violet-700 dark:bg-violet-900 dark:text-violet-300',
@@ -10,6 +12,9 @@
     'bg-teal-100 text-teal-700 dark:bg-teal-900 dark:text-teal-300',
     'bg-orange-100 text-orange-700 dark:bg-orange-900 dark:text-orange-300',
   ];
+
+  let failed = false;
+  $: src, (failed = false); // reset when the source changes
 
   function getInitials(n: string) {
     if (!n) return '?';
@@ -29,6 +34,16 @@
   $: sizeClass = size === 'sm' ? 'w-7 h-7 text-xs' : size === 'lg' ? 'w-12 h-12 text-base' : 'w-9 h-9 text-sm';
 </script>
 
-<div class="rounded-full flex items-center justify-center font-semibold shrink-0 {sizeClass} {color}">
-  {initials}
-</div>
+{#if src && !failed}
+  <img
+    {src}
+    alt={name}
+    loading="lazy"
+    on:error={() => (failed = true)}
+    class="rounded-full object-cover shrink-0 {sizeClass}"
+  />
+{:else}
+  <div class="rounded-full flex items-center justify-center font-semibold shrink-0 {sizeClass} {color}">
+    {initials}
+  </div>
+{/if}

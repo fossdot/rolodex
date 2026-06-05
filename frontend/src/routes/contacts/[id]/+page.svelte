@@ -2,11 +2,12 @@
   import { onMount } from 'svelte';
   import { page } from '$app/stores';
   import { goto } from '$app/navigation';
-  import { pb } from '$lib/pb';
+  import { pb, photoUrl } from '$lib/pb';
   import { currentUser, toasts } from '$lib/stores';
-  import type { Contact, Activity } from '$lib/types';
+  import type { Contact, Activity, User } from '$lib/types';
   import { FU_ROLES, TOPICS, ACTIVITY_TYPES } from '$lib/constants';
   import Avatar from '$lib/components/Avatar.svelte';
+  import Lightbox from '$lib/components/Lightbox.svelte';
 
   let contact: Contact | null = null;
   let activities: Activity[] = [];
@@ -113,8 +114,34 @@
   }
 
   $: canEditContact = contact && ($currentUser?.role === 'admin' || (!contact.deleted_at && $currentUser?.id === contact.added_by));
-  // Only the employee who added the contact can log activities on it
-  $: canLogActivity = $currentUser?.role !== 'admin' && contact?.added_by === $currentUser?.id && !contact?.deleted_at;
+  // Any employee can log activities on any contact — engagement is shared.
+  // (Admins are excluded: logging counts toward employee scores.)
+  $: canLogActivity = $currentUser?.role !== 'admin' && !contact?.deleted_at;
+
+  // ── Photo lightbox ───────────────────────────────────────────────────────────
+  // The full-size original is only assigned (and therefore fetched) on click.
+  let lightboxOpen = false;
+  let lightboxSrc = '';
+  function openPhoto() {
+    if (!contact?.photo) return;
+    lightboxSrc = photoUrl(contact);
+    lightboxOpen = true;
+  }
+
+  // ── Engaged employees ────────────────────────────────────────────────────────
+  // Everyone who has logged a (non-deleted) activity on this contact.
+  $: engaged = [
+    ...new Map(
+      activities
+        .filter((a) => !a.deleted_at && a.expand?.logged_by)
+        .map((a) => [a.logged_by, a.expand!.logged_by as User])
+    ).values(),
+  ];
+
+  let employeeFilter = '';
+  $: shownActivities = employeeFilter
+    ? activities.filter((a) => a.logged_by === employeeFilter)
+    : activities;
 
   function formatDate(d: string) {
     if (!d) return '—';
@@ -150,14 +177,20 @@
         </svg>
       </a>
       <div class="flex-1 flex items-center gap-4">
-        <Avatar name={displayName(contact)} size="lg" />
+        {#if contact.photo}
+          <button on:click={openPhoto} class="cursor-zoom-in rounded-full focus:outline-none focus:ring-2 focus:ring-accent" title="View photo">
+            <Avatar name={displayName(contact)} size="lg" src={photoUrl(contact, '100x100')} />
+          </button>
+        {:else}
+          <Avatar name={displayName(contact)} size="lg" />
+        {/if}
         <div>
           <h1 class="text-xl font-semibold text-neutral-900 dark:text-neutral-50 tracking-tight">
             {contact.name || '—'}
           </h1>
           {#if contact.org}
             <p class="text-sm text-neutral-500 dark:text-neutral-400">
-              {contact.designation ? `${contact.designation} · ` : ''}{contact.org}
+              {contact.designation ? `${contact.designation} · ` : ''}<a href="/orgs/{encodeURIComponent(contact.org)}" class="hover:text-accent dark:hover:text-accent-dark hover:underline transition-colors">{contact.org}</a>
             </p>
           {:else if contact.designation}
             <p class="text-sm text-neutral-500 dark:text-neutral-400">{contact.designation}</p>
@@ -331,6 +364,34 @@
           {/if}
         </div>
 
+        <!-- Engaged employees — everyone who has logged activities here -->
+        {#if engaged.length > 0}
+          <div class="flex flex-wrap items-center gap-1.5 mb-4">
+            <button
+              on:click={() => (employeeFilter = '')}
+              class="px-2.5 py-1 rounded-full text-xs font-medium border transition-all
+                {employeeFilter === ''
+                  ? 'bg-neutral-900 dark:bg-white text-white dark:text-neutral-900 border-neutral-900 dark:border-white'
+                  : 'border-neutral-200 dark:border-neutral-700 text-neutral-600 dark:text-neutral-400 hover:border-neutral-400'}"
+            >
+              All
+            </button>
+            {#each engaged as emp (emp.id)}
+              <button
+                on:click={() => (employeeFilter = employeeFilter === emp.id ? '' : emp.id)}
+                class="flex items-center gap-1.5 pl-1 pr-2.5 py-0.5 rounded-full text-xs font-medium border transition-all
+                  {employeeFilter === emp.id
+                    ? 'bg-neutral-900 dark:bg-white text-white dark:text-neutral-900 border-neutral-900 dark:border-white'
+                    : 'border-neutral-200 dark:border-neutral-700 text-neutral-600 dark:text-neutral-400 hover:border-neutral-400'}"
+                title="Show only {emp.name || emp.email}'s activities"
+              >
+                <Avatar name={emp.name || emp.email || '?'} size="sm" />
+                {emp.name || emp.email}
+              </button>
+            {/each}
+          </div>
+        {/if}
+
         <!-- Activity form -->
         {#if showActivityForm}
           <div class="card p-5 mb-4 animate-fade-in space-y-4">
@@ -392,7 +453,7 @@
           </div>
         {:else}
           <div class="space-y-2">
-            {#each activities as activity (activity.id)}
+            {#each shownActivities as activity (activity.id)}
               <div class="card px-4 py-3.5 flex items-start gap-3 group animate-fade-in {activity.deleted_at ? 'opacity-50' : ''}">
                 <div class="w-1.5 h-1.5 rounded-full {activity.deleted_at ? 'bg-red-400' : 'bg-accent dark:bg-accent-dark'} mt-2 shrink-0"></div>
                 <div class="flex-1 min-w-0">
@@ -427,4 +488,6 @@
       </div>
     </div>
   </div>
+
+  <Lightbox bind:open={lightboxOpen} src={lightboxSrc} alt={displayName(contact)} />
 {/if}

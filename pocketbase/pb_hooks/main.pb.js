@@ -31,10 +31,22 @@ onRecordCreateRequest((e) => {
 
 // Force added_by = authenticated user, regardless of what the client sends.
 // Prevents attribution fraud and score gaming via the API.
+// Also: when 'other' is picked in fu_roles/topics, the matching free-text
+// field must be filled (the schema can't express conditional requirements).
 onRecordCreateRequest((e) => {
     if (e.auth) {
         e.record.set("added_by", e.auth.id);
     }
+
+    const roles = e.record.get("fu_roles") || [];
+    if (roles.includes && roles.includes("other") && String(e.record.get("fu_roles_other") || "").trim() === "") {
+        throw new BadRequestError("Please specify the 'other' FOSS United role.");
+    }
+    const topics = e.record.get("topics") || [];
+    if (topics.includes && topics.includes("other") && String(e.record.get("topics_other") || "").trim() === "") {
+        throw new BadRequestError("Please specify the 'other' topic.");
+    }
+
     e.next();
 }, "contacts");
 
@@ -61,10 +73,23 @@ onRecordUpdateRequest((e) => {
     if (!wasDeleted && isNowDeleted) {
         e.record.set("deleted_by", e.auth ? e.auth.id : "");
     } else if (wasDeleted && !isNowDeleted) {
-        if (!e.auth || e.auth.getString("role") !== "admin") {
+        const isSuperuser = e.auth && e.auth.collection().name === "_superusers";
+        if (!isSuperuser && (!e.auth || e.auth.getString("role") !== "admin")) {
             throw new ForbiddenError("Only admins can restore deleted contacts.");
         }
         e.record.set("deleted_by", "");
+    }
+
+    // e.record is the merged record (original + incoming changes), so these
+    // checks see final state — partial updates like soft-delete pass as long
+    // as the stored record was valid.
+    const roles = e.record.get("fu_roles") || [];
+    if (roles.includes && roles.includes("other") && String(e.record.get("fu_roles_other") || "").trim() === "") {
+        throw new BadRequestError("Please specify the 'other' FOSS United role.");
+    }
+    const topics = e.record.get("topics") || [];
+    if (topics.includes && topics.includes("other") && String(e.record.get("topics_other") || "").trim() === "") {
+        throw new BadRequestError("Please specify the 'other' topic.");
     }
 
     e.next();

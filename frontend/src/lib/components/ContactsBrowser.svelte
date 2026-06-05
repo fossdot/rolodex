@@ -1,6 +1,6 @@
 <script lang="ts">
   import { onMount } from 'svelte';
-  import { pb } from '$lib/pb';
+  import { pb, photoUrl } from '$lib/pb';
   import { currentUser, toasts } from '$lib/stores';
   import type { Contact } from '$lib/types';
   import { FU_ROLES, TOPICS } from '$lib/constants';
@@ -28,7 +28,12 @@
       const isAdmin = $currentUser?.role === 'admin';
       const filters: string[] = [showDeleted && isAdmin ? 'deleted_at != null' : 'deleted_at = null'];
       if (scope === 'mine' && $currentUser?.id) {
-        filters.push(`added_by = '${$currentUser.id}'`);
+        // Contacts I added OR have engaged with (logged an activity on) —
+        // activities_via_contact is PocketBase's back-relation from contacts
+        // to activities; ?= matches if ANY of the related rows' logged_by is me.
+        filters.push(
+          `(added_by = '${$currentUser.id}' || activities_via_contact.logged_by ?= '${$currentUser.id}')`
+        );
       }
       if (search.trim()) {
         const q = search.trim().replace(/\\/g, '\\\\').replace(/'/g, "\\'");
@@ -283,7 +288,7 @@
         <div class="card p-4 transition-all duration-150 {contact.deleted_at ? 'opacity-70 border-red-200 dark:border-red-900' : 'hover:shadow-md hover:border-neutral-200 dark:hover:border-neutral-700'}">
           <a href="/contacts/{contact.id}" class="group block">
             <div class="flex items-start gap-3 mb-3">
-              <Avatar name={displayName(contact)} />
+              <Avatar name={displayName(contact)} src={photoUrl(contact, '100x100')} />
               <div class="flex-1 min-w-0">
                 <p class="text-sm font-semibold text-neutral-900 dark:text-neutral-100 truncate group-hover:text-accent dark:group-hover:text-accent-dark transition-colors">
                   {contact.name || '—'}
@@ -342,7 +347,7 @@
       {#each contacts as contact (contact.id)}
         <div class="flex items-center gap-4 px-4 py-3 {contact.deleted_at ? 'opacity-70' : 'hover:bg-neutral-50 dark:hover:bg-neutral-900'} transition-colors group">
           <a href="/contacts/{contact.id}" class="flex items-center gap-4 flex-1 min-w-0">
-          <Avatar name={displayName(contact)} size="sm" />
+          <Avatar name={displayName(contact)} size="sm" src={photoUrl(contact, '100x100')} />
           <div class="flex-1 min-w-0 grid grid-cols-4 gap-4 items-center">
             <div class="min-w-0 col-span-1">
               <div class="flex items-center gap-1.5">

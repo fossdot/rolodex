@@ -2,11 +2,12 @@
   import { onMount } from 'svelte';
   import { page } from '$app/stores';
   import { goto } from '$app/navigation';
-  import { pb } from '$lib/pb';
+  import { pb, photoUrl } from '$lib/pb';
   import { currentUser, toasts } from '$lib/stores';
   import type { Contact } from '$lib/types';
   import { FU_ROLES, TOPICS, COUNTRIES } from '$lib/constants';
   import CityInput from '$lib/components/CityInput.svelte';
+  import OrgInput from '$lib/components/OrgInput.svelte';
   import MultiSelect from '$lib/components/MultiSelect.svelte';
 
   $: id = $page.params.id ?? '';
@@ -26,6 +27,39 @@
   let fu_roles_other = '';
   let topics: string[] = [];
   let topics_other = '';
+
+  // Photo upload
+  let existingPhotoUrl = '';
+  let photoFile: File | null = null;
+  let photoPreview = '';
+  let photoRemoved = false;
+  const MAX_PHOTO_BYTES = 5 * 1024 * 1024;
+
+  function onPhotoChange(e: Event) {
+    const file = (e.target as HTMLInputElement).files?.[0];
+    if (!file) return;
+    if (file.size > MAX_PHOTO_BYTES) {
+      errors = { ...errors, photo: 'Photo must be 5 MB or smaller.' };
+      return;
+    }
+    delete errors.photo;
+    photoFile = file;
+    photoRemoved = false;
+    if (photoPreview) URL.revokeObjectURL(photoPreview);
+    photoPreview = URL.createObjectURL(file);
+  }
+
+  function removePhoto() {
+    photoFile = null;
+    photoRemoved = true;
+    if (photoPreview) URL.revokeObjectURL(photoPreview);
+    photoPreview = '';
+    existingPhotoUrl = '';
+  }
+
+  $: shownPhoto = photoPreview || existingPhotoUrl;
+
+  let orgSuggestions: string[] = [];
 
   let loading = true;
   let saving = false;
@@ -54,11 +88,23 @@
       fu_roles_other = c.fu_roles_other ?? '';
       topics_other = c.topics_other ?? '';
       topics = c.topics ?? [];
+      existingPhotoUrl = photoUrl(c, '100x100');
     } catch {
       toasts.error('Contact not found');
       goto('/contacts');
+      return;
     } finally {
       loading = false;
+    }
+
+    try {
+      const r = await pb.collection('contacts').getList(1, 500, {
+        filter: "org != '' && deleted_at = null",
+        fields: 'org',
+      });
+      orgSuggestions = [...new Set(r.items.map((i) => String(i.org).trim()).filter(Boolean))].sort();
+    } catch {
+      /* non-fatal */
     }
   });
 
@@ -67,6 +113,11 @@
     if (!name.trim() && !org.trim()) errors.identity = 'Either Name or Organisation is required.';
     if (!email.trim() && !mobile.trim()) errors.contact = 'Either Email or Mobile is required.';
     if (email.trim() && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim())) errors.email = 'Enter a valid email address.';
+    if (!how_you_know.trim()) errors.how_you_know = 'Tell us how you know them.';
+    if (fu_roles.length === 0) errors.fu_roles = 'Select at least one way they can be part of FOSS United.';
+    if (topics.length === 0) errors.topics = 'Select at least one area of interest.';
+    if (fu_roles.includes('other') && !fu_roles_other.trim()) errors.fu_roles_other = 'Please specify the other role.';
+    if (topics.includes('other') && !topics_other.trim()) errors.topics_other = 'Please specify the other area.';
     return Object.keys(errors).length === 0;
   }
 
@@ -74,27 +125,31 @@
     if (!validate()) return;
     saving = true;
     try {
-      await pb.collection('contacts').update(id, {
-        name: name.trim(),
-        org: org.trim(),
-        designation: designation.trim(),
-        city: city.trim(),
-        country,
-        email: email.trim(),
-        mobile: mobile.trim(),
-        secondary_email: secondary_email.trim(),
-        secondary_mobile: secondary_mobile.trim(),
-        how_you_know: how_you_know.trim(),
-        linkedin: linkedin.trim(),
-        fu_roles_other: fu_roles.includes('other') ? fu_roles_other.trim() : '',
-        topics_other: topics.includes('other') ? topics_other.trim() : '',
-        fu_roles,
-        topics,
-      });
+      const fd = new FormData();
+      fd.append('name', name.trim());
+      fd.append('org', org.trim());
+      fd.append('designation', designation.trim());
+      fd.append('city', city.trim());
+      fd.append('country', country);
+      fd.append('email', email.trim());
+      fd.append('mobile', mobile.trim());
+      fd.append('secondary_email', secondary_email.trim());
+      fd.append('secondary_mobile', secondary_mobile.trim());
+      fd.append('how_you_know', how_you_know.trim());
+      fd.append('linkedin', linkedin.trim());
+      fu_roles.forEach((r) => fd.append('fu_roles', r));
+      topics.forEach((t) => fd.append('topics', t));
+      fd.append('fu_roles_other', fu_roles.includes('other') ? fu_roles_other.trim() : '');
+      fd.append('topics_other', topics.includes('other') ? topics_other.trim() : '');
+      if (photoFile) fd.append('photo', photoFile);
+      else if (photoRemoved) fd.append('photo', '');
+
+      await pb.collection('contacts').update(id, fd);
       toasts.success('Contact updated');
       goto(`/contacts/${id}`);
-    } catch {
-      toasts.error('Failed to update contact');
+    } catch (e: unknown) {
+      const msg = (e as { response?: { message?: string } })?.response?.message;
+      toasts.error(msg || 'Failed to update contact');
     } finally {
       saving = false;
     }
@@ -141,11 +196,35 @@
           </div>
           <div>
             <label for="org" class="label">Organisation</label>
-            <input id="org" type="text" bind:value={org} class="input {errors.identity ? 'ring-2 ring-red-400' : ''}" placeholder="GNOME Foundation" />
+            <OrgInput id="org" bind:value={org} suggestions={orgSuggestions} extraClass={errors.identity ? 'ring-2 ring-red-400' : ''} />
           </div>
           <div class="sm:col-span-2">
             <label for="designation" class="label">Designation <span class="text-neutral-400 normal-case font-normal">(optional)</span></label>
             <input id="designation" type="text" bind:value={designation} class="input" placeholder="Software Engineer" />
+          </div>
+          <div class="sm:col-span-2">
+            <span class="label">Photo <span class="text-neutral-400 normal-case font-normal">(optional, max 5 MB)</span></span>
+            <div class="flex items-center gap-4 mt-1">
+              {#if shownPhoto}
+                <img src={shownPhoto} alt="Preview" class="w-16 h-16 rounded-full object-cover" />
+              {:else}
+                <div class="w-16 h-16 rounded-full bg-neutral-100 dark:bg-neutral-800 flex items-center justify-center text-neutral-400">
+                  <svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/>
+                  </svg>
+                </div>
+              {/if}
+              <div class="flex items-center gap-2">
+                <label class="btn-secondary text-xs py-1.5 cursor-pointer">
+                  {shownPhoto ? 'Change photo' : 'Upload photo'}
+                  <input type="file" accept="image/jpeg,image/png,image/webp,image/gif" on:change={onPhotoChange} class="hidden" />
+                </label>
+                {#if shownPhoto}
+                  <button type="button" on:click={removePhoto} class="btn-ghost text-xs py-1.5 text-red-500">Remove</button>
+                {/if}
+              </div>
+            </div>
+            {#if errors.photo}<p class="text-xs text-red-500 mt-1">{errors.photo}</p>{/if}
           </div>
         </div>
       </div>
@@ -199,26 +278,31 @@
       </div>
 
       <div class="card p-5">
-        <label for="how" class="label">How do you know them?</label>
-        <textarea id="how" bind:value={how_you_know} class="input resize-none" rows="3"></textarea>
+        <label for="how" class="label">How do you know them? *</label>
+        <textarea id="how" bind:value={how_you_know} class="input resize-none {errors.how_you_know ? 'ring-2 ring-red-400' : ''}" rows="3"></textarea>
+        {#if errors.how_you_know}<p class="text-xs text-red-500 mt-1">{errors.how_you_know}</p>{/if}
       </div>
 
-      <div class="card p-5 space-y-3">
-        <MultiSelect label="How can they be part of FOSS United?" options={FU_ROLES} bind:selected={fu_roles} />
+      <div class="card p-5 space-y-3 {errors.fu_roles ? 'ring-2 ring-red-400' : ''}">
+        <MultiSelect label="How can they be part of FOSS United? *" options={FU_ROLES} bind:selected={fu_roles} />
+        {#if errors.fu_roles}<p class="text-xs text-red-500">{errors.fu_roles}</p>{/if}
         {#if fu_roles.includes('other')}
           <div class="animate-fade-in">
-            <label for="fu-other" class="label">Specify other role</label>
-            <input id="fu-other" type="text" bind:value={fu_roles_other} class="input" placeholder="e.g. Legal advisor, Accessibility advocate…" />
+            <label for="fu-other" class="label">Specify other role *</label>
+            <input id="fu-other" type="text" bind:value={fu_roles_other} class="input {errors.fu_roles_other ? 'ring-2 ring-red-400' : ''}" placeholder="e.g. Legal advisor, Accessibility advocate…" />
+            {#if errors.fu_roles_other}<p class="text-xs text-red-500 mt-1">{errors.fu_roles_other}</p>{/if}
           </div>
         {/if}
       </div>
 
-      <div class="card p-5 space-y-3">
-        <MultiSelect label="Areas of Interest / Expertise" options={TOPICS} bind:selected={topics} columns={3} />
+      <div class="card p-5 space-y-3 {errors.topics ? 'ring-2 ring-red-400' : ''}">
+        <MultiSelect label="Areas of Interest / Expertise *" options={TOPICS} bind:selected={topics} columns={3} />
+        {#if errors.topics}<p class="text-xs text-red-500">{errors.topics}</p>{/if}
         {#if topics.includes('other')}
           <div class="animate-fade-in">
-            <label for="topics-other" class="label">Specify other area</label>
-            <input id="topics-other" type="text" bind:value={topics_other} class="input" placeholder="e.g. Quantum computing, Biotech…" />
+            <label for="topics-other" class="label">Specify other area *</label>
+            <input id="topics-other" type="text" bind:value={topics_other} class="input {errors.topics_other ? 'ring-2 ring-red-400' : ''}" placeholder="e.g. Quantum computing, Biotech…" />
+            {#if errors.topics_other}<p class="text-xs text-red-500 mt-1">{errors.topics_other}</p>{/if}
           </div>
         {/if}
       </div>

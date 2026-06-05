@@ -36,9 +36,9 @@ Contacts are not exportable from the browser. The database is self-hosted. When 
 
 | Role | Access |
 |---|---|
-| Directors (superadmin) | Full database access via PocketBase admin panel |
-| App admins | Dashboard with leaderboard, activity feed, and all contacts |
-| Staff / volunteers | Add and manage their own contacts; view the full network; log activities |
+| Superadmin | Full database access via PocketBase admin panel |
+| App Admin | Dashboard with leaderboard, activity feed, and all contacts |
+| Staff | Add and manage their own contacts; view the full network; log activities |
 
 ---
 

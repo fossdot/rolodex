@@ -237,8 +237,22 @@
         {/each}
       </div>
     {:else}
-      <!-- Stats -->
-      <div class="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-6">
+      <!-- Stats: one compact strip on phones, three cards from sm: up -->
+      <div class="card grid grid-cols-3 divide-x divide-neutral-100 dark:divide-neutral-800 mb-6 sm:hidden">
+        <div class="px-2 py-3 text-center">
+          <p class="text-[10px] text-neutral-500 dark:text-neutral-400 uppercase tracking-wider font-medium mb-1">Contacts</p>
+          <p class="text-xl font-semibold text-neutral-900 dark:text-neutral-50 tabular-nums">{totalContacts}</p>
+        </div>
+        <div class="px-2 py-3 text-center">
+          <p class="text-[10px] text-neutral-500 dark:text-neutral-400 uppercase tracking-wider font-medium mb-1">Activities</p>
+          <p class="text-xl font-semibold text-neutral-900 dark:text-neutral-50 tabular-nums">{totalActivities}</p>
+        </div>
+        <div class="px-2 py-3 text-center">
+          <p class="text-[10px] text-neutral-500 dark:text-neutral-400 uppercase tracking-wider font-medium mb-1">Team</p>
+          <p class="text-xl font-semibold text-neutral-900 dark:text-neutral-50 tabular-nums">{totalUsers}</p>
+        </div>
+      </div>
+      <div class="hidden sm:grid sm:grid-cols-3 gap-4 mb-6">
         <div class="card p-5">
           <p class="text-xs text-neutral-500 dark:text-neutral-400 uppercase tracking-wider font-medium mb-2">Total Contacts</p>
           <p class="text-3xl font-semibold text-neutral-900 dark:text-neutral-50 tabular-nums">{totalContacts}</p>

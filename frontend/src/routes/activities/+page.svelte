@@ -181,7 +181,7 @@
       {#each PERIODS as [v, label]}
         <button
           on:click={() => setPeriod(v)}
-          class="px-3 py-2 transition-colors {period === v
+          class="px-2.5 py-1.5 text-xs sm:px-3 sm:py-2 sm:text-sm whitespace-nowrap transition-colors {period === v
             ? 'bg-neutral-900 dark:bg-white text-white dark:text-neutral-900 font-medium'
             : 'text-neutral-500 dark:text-neutral-400 hover:bg-neutral-50 dark:hover:bg-neutral-800'}"
         >

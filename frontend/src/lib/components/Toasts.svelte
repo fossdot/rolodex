@@ -2,10 +2,11 @@
   import { toasts } from '$lib/stores';
 </script>
 
-<div class="fixed bottom-4 right-4 z-50 flex flex-col gap-2 pointer-events-none">
+<!-- full-width with margins on phones, anchored bottom-right elsewhere -->
+<div class="fixed bottom-4 left-4 right-4 sm:left-auto z-50 flex flex-col items-stretch sm:items-end gap-2 pointer-events-none">
   {#each $toasts as toast (toast.id)}
     <div
-      class="pointer-events-auto flex items-start gap-3 px-4 py-3 rounded-xl shadow-lg border text-sm font-medium max-w-sm animate-slide-in
+      class="pointer-events-auto flex items-start gap-3 px-4 py-3 rounded-xl shadow-lg border text-sm font-medium sm:max-w-sm animate-slide-in
         {toast.type === 'success' ? 'bg-white dark:bg-neutral-900 border-neutral-200 dark:border-neutral-700 text-neutral-900 dark:text-neutral-100' : ''}
         {toast.type === 'error' ? 'bg-red-50 dark:bg-red-950 border-red-200 dark:border-red-800 text-red-800 dark:text-red-200' : ''}
         {toast.type === 'info' ? 'bg-white dark:bg-neutral-900 border-neutral-200 dark:border-neutral-700 text-neutral-600 dark:text-neutral-300' : ''}"

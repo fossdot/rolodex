@@ -228,7 +228,7 @@
     </div>
 
     {#if loading}
-      <div class="grid grid-cols-3 gap-4 mb-6">
+      <div class="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-6">
         {#each Array(3) as _}
           <div class="card p-5 animate-pulse">
             <div class="h-4 bg-neutral-100 dark:bg-neutral-800 rounded w-1/2 mb-3"></div>
@@ -262,7 +262,7 @@
           </h2>
           <div class="card divide-y divide-neutral-100 dark:divide-neutral-800">
             {#each leaderboard as entry, i}
-              <div class="flex items-center gap-4 px-4 py-3">
+              <div class="flex items-center gap-2.5 sm:gap-4 px-3 sm:px-4 py-3">
                 <span class="text-sm font-mono font-medium text-neutral-400 dark:text-neutral-500 w-5 text-right shrink-0">
                   {i + 1}
                 </span>
@@ -273,7 +273,7 @@
                   </p>
                   <p class="text-xs text-neutral-400 dark:text-neutral-500 capitalize">{entry.user.role}</p>
                 </div>
-                <div class="flex items-center gap-4 text-right shrink-0">
+                <div class="flex items-center gap-3 sm:gap-4 text-right shrink-0">
                   <div>
                     <p class="text-sm font-semibold text-neutral-900 dark:text-neutral-100 tabular-nums">{entry.contacts}</p>
                     <p class="text-[10px] text-neutral-400">contacts</p>

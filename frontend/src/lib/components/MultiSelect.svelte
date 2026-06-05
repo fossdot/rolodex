@@ -17,7 +17,8 @@
   {#if label}
     <span class="label">{label}</span>
   {/if}
-  <div class="grid gap-2 {columns === 3 ? 'grid-cols-3' : 'grid-cols-2'}">
+  <!-- single column on phones — the long role labels need the width -->
+  <div class="grid gap-2 {columns === 3 ? 'grid-cols-2 sm:grid-cols-3' : 'grid-cols-1 sm:grid-cols-2'}">
     {#each options as opt}
       <button
         type="button"

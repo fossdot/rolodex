@@ -348,7 +348,8 @@
         <div class="flex items-center gap-4 px-4 py-3 {contact.deleted_at ? 'opacity-70' : 'hover:bg-neutral-50 dark:hover:bg-neutral-900'} transition-colors group">
           <a href="/contacts/{contact.id}" class="flex items-center gap-4 flex-1 min-w-0">
           <Avatar name={displayName(contact)} size="sm" src={photoUrl(contact, '100x100')} />
-          <div class="flex-1 min-w-0 grid grid-cols-1 sm:grid-cols-4 gap-1 sm:gap-4 items-center">
+          <!-- phones: name+org · tablets: +roles · desktop: all four columns -->
+          <div class="flex-1 min-w-0 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-1 sm:gap-4 items-center">
             <div class="min-w-0 col-span-1">
               <div class="flex items-center gap-1.5">
                 <p class="text-sm font-medium text-neutral-900 dark:text-neutral-100 truncate group-hover:text-accent dark:group-hover:text-accent-dark transition-colors">
@@ -362,8 +363,8 @@
                 <p class="text-xs text-neutral-500 dark:text-neutral-400 truncate">{contact.org}</p>
               {/if}
             </div>
-            <p class="text-xs text-neutral-500 dark:text-neutral-400 truncate col-span-1 hidden sm:block">{contact.designation || '—'}</p>
-            <p class="text-xs text-neutral-500 dark:text-neutral-400 truncate col-span-1 hidden sm:block">
+            <p class="text-xs text-neutral-500 dark:text-neutral-400 truncate col-span-1 hidden lg:block">{contact.designation || '—'}</p>
+            <p class="text-xs text-neutral-500 dark:text-neutral-400 truncate col-span-1 hidden lg:block">
               {[contact.city, contact.country].filter(Boolean).join(', ') || '—'}
             </p>
             <div class="hidden sm:flex flex-wrap gap-1 col-span-1">

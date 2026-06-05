@@ -23,32 +23,50 @@
   let startDate = '';
   let endDate = '';
 
-  // Quick month picker — selecting a month fills From/To with its bounds.
-  // Editing the dates by hand clears the selection (range becomes custom).
-  let monthSel = '';
+  // Month + Year quick filters. Year alone = whole year; Month + Year = that
+  // month. Custom From/To pickers are tucked behind the calendar toggle and
+  // clear the selects when edited by hand.
+  let monthSel = ''; // '01'…'12'
+  let yearSel = '';
+  let showCustom = false;
 
-  const MONTH_OPTIONS: { value: string; label: string }[] = (() => {
-    const opts = [];
-    const d = new Date();
-    d.setDate(1);
-    for (let i = 0; i < 36; i++) {
-      const value = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
-      opts.push({ value, label: d.toLocaleDateString('en-IN', { month: 'long', year: 'numeric' }) });
-      d.setMonth(d.getMonth() - 1);
+  const MONTHS = [
+    ['01', 'January'], ['02', 'February'], ['03', 'March'], ['04', 'April'],
+    ['05', 'May'], ['06', 'June'], ['07', 'July'], ['08', 'August'],
+    ['09', 'September'], ['10', 'October'], ['11', 'November'], ['12', 'December'],
+  ];
+
+  const THIS_YEAR = new Date().getFullYear();
+  const YEARS = Array.from({ length: 4 }, (_, i) => String(THIS_YEAR - i));
+
+  function applyMonthYear() {
+    if (!monthSel && !yearSel) {
+      startDate = '';
+      endDate = '';
+      return;
     }
-    return opts;
-  })();
-
-  function applyMonth() {
-    if (!monthSel) return;
-    const [y, m] = monthSel.split('-').map(Number);
-    const lastDay = new Date(y, m, 0).getDate();
-    startDate = `${monthSel}-01`;
-    endDate = `${monthSel}-${String(lastDay).padStart(2, '0')}`;
+    if (monthSel && !yearSel) yearSel = String(THIS_YEAR); // month implies a year
+    if (monthSel) {
+      const lastDay = new Date(Number(yearSel), Number(monthSel), 0).getDate();
+      startDate = `${yearSel}-${monthSel}-01`;
+      endDate = `${yearSel}-${monthSel}-${String(lastDay).padStart(2, '0')}`;
+    } else {
+      startDate = `${yearSel}-01-01`;
+      endDate = `${yearSel}-12-31`;
+    }
   }
 
   function onManualDateInput() {
     monthSel = '';
+    yearSel = '';
+  }
+
+  function clearRange() {
+    startDate = '';
+    endDate = '';
+    monthSel = '';
+    yearSel = '';
+    showCustom = false;
   }
 
   function contactsRangeFilter() {
@@ -178,32 +196,51 @@
         </p>
       </div>
       <!-- Date range filter — drives the stats and the leaderboard -->
-      <div class="flex items-end gap-3">
-        <div>
-          <label for="admin-month" class="label">Month</label>
-          <select id="admin-month" bind:value={monthSel} on:change={applyMonth} class="input min-w-36">
-            <option value="">Pick a month…</option>
-            {#each MONTH_OPTIONS as m (m.value)}
-              <option value={m.value}>{m.label}</option>
+      <div class="flex flex-col items-end gap-2">
+        <div class="flex items-center gap-2">
+          <select
+            bind:value={monthSel}
+            on:change={applyMonthYear}
+            class="input py-1.5 text-sm w-auto"
+            title="Month"
+          >
+            <option value="">Month</option>
+            {#each MONTHS as [v, label] (v)}
+              <option value={v}>{label}</option>
             {/each}
           </select>
-        </div>
-        <div>
-          <label for="admin-start" class="label">From</label>
-          <input id="admin-start" type="date" bind:value={startDate} on:input={onManualDateInput} class="input" />
-        </div>
-        <div>
-          <label for="admin-end" class="label">To</label>
-          <input id="admin-end" type="date" bind:value={endDate} on:input={onManualDateInput} class="input" />
-        </div>
-        {#if startDate || endDate}
-          <button
-            on:click={() => { startDate = ''; endDate = ''; monthSel = ''; }}
-            class="btn-ghost text-xs py-2.5"
-            title="Show all time"
+          <select
+            bind:value={yearSel}
+            on:change={applyMonthYear}
+            class="input py-1.5 text-sm w-auto"
+            title="Year"
           >
-            Clear
+            <option value="">Year</option>
+            {#each YEARS as y (y)}
+              <option value={y}>{y}</option>
+            {/each}
+          </select>
+          <button
+            on:click={() => (showCustom = !showCustom)}
+            class="btn-ghost p-2 {showCustom ? 'text-accent dark:text-accent-dark' : 'text-neutral-400'}"
+            title="Custom date range"
+          >
+            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <rect width="18" height="18" x="3" y="4" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/>
+            </svg>
           </button>
+          {#if startDate || endDate}
+            <button on:click={clearRange} class="btn-ghost text-xs py-2" title="Show all time">
+              Clear
+            </button>
+          {/if}
+        </div>
+        {#if showCustom}
+          <div class="flex items-center gap-2 animate-fade-in">
+            <input type="date" bind:value={startDate} on:input={onManualDateInput} class="input py-1.5 text-xs w-auto" title="From" />
+            <span class="text-xs text-neutral-400">→</span>
+            <input type="date" bind:value={endDate} on:input={onManualDateInput} class="input py-1.5 text-xs w-auto" title="To" />
+          </div>
         {/if}
       </div>
     </div>

@@ -58,6 +58,14 @@ onRecordCreateRequest((e) => {
     e.next();
 }, "activities");
 
+// Force editor = authenticated user on contact edit-log entries.
+onRecordCreateRequest((e) => {
+    if (e.auth) {
+        e.record.set("editor", e.auth.id);
+    }
+    e.next();
+}, "contact_logs");
+
 // Reactions: force user = auth; re-reacting replaces the previous reaction
 // (WhatsApp behaviour) so the unique (activity, user) index never trips.
 onRecordCreateRequest((e) => {
@@ -89,6 +97,12 @@ onRecordUpdateRequest((e) => {
     const isNowDeleted = e.record.getString("deleted_at") !== "";
 
     if (!wasDeleted && isNowDeleted) {
+        // Editing is open to everyone, but only the contact's creator can delete.
+        const isSuperuser = e.auth && e.auth.collection().name === "_superusers";
+        const isOwner = e.auth && e.auth.id === original.getString("added_by");
+        if (!isSuperuser && !isOwner) {
+            throw new ForbiddenError("Only the contact's creator can delete it.");
+        }
         e.record.set("deleted_by", e.auth ? e.auth.id : "");
     } else if (wasDeleted && !isNowDeleted) {
         const isSuperuser = e.auth && e.auth.collection().name === "_superusers";

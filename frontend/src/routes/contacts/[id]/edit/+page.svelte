@@ -2,13 +2,15 @@
   import { onMount } from 'svelte';
   import { page } from '$app/stores';
   import { goto } from '$app/navigation';
-  import { pb, photoUrl } from '$lib/pb';
+  import { pb } from '$lib/pb';
   import { currentUser, toasts } from '$lib/stores';
-  import type { Contact } from '$lib/types';
+  import type { Contact, ContactLogChange } from '$lib/types';
   import { FU_ROLES, TOPICS, COUNTRIES } from '$lib/constants';
   import CityInput from '$lib/components/CityInput.svelte';
   import OrgInput from '$lib/components/OrgInput.svelte';
   import MultiSelect from '$lib/components/MultiSelect.svelte';
+  import RichTextEditor from '$lib/components/RichTextEditor.svelte';
+  import { sanitizeHtml, htmlToText } from '$lib/sanitizeHtml';
 
   $: id = $page.params.id ?? '';
 
@@ -28,38 +30,10 @@
   let topics: string[] = [];
   let topics_other = '';
 
-  // Photo upload
-  let existingPhotoUrl = '';
-  let photoFile: File | null = null;
-  let photoPreview = '';
-  let photoRemoved = false;
-  const MAX_PHOTO_BYTES = 5 * 1024 * 1024;
-
-  function onPhotoChange(e: Event) {
-    const file = (e.target as HTMLInputElement).files?.[0];
-    if (!file) return;
-    if (file.size > MAX_PHOTO_BYTES) {
-      errors = { ...errors, photo: 'Photo must be 5 MB or smaller.' };
-      return;
-    }
-    delete errors.photo;
-    photoFile = file;
-    photoRemoved = false;
-    if (photoPreview) URL.revokeObjectURL(photoPreview);
-    photoPreview = URL.createObjectURL(file);
-  }
-
-  function removePhoto() {
-    photoFile = null;
-    photoRemoved = true;
-    if (photoPreview) URL.revokeObjectURL(photoPreview);
-    photoPreview = '';
-    existingPhotoUrl = '';
-  }
-
-  $: shownPhoto = photoPreview || existingPhotoUrl;
-
   let orgSuggestions: string[] = [];
+
+  // Snapshot of the values as loaded, used to diff what changed on save.
+  let original: Record<string, unknown> = {};
 
   let loading = true;
   let saving = false;
@@ -68,11 +42,6 @@
   onMount(async () => {
     try {
       const c = await pb.collection('contacts').getOne<Contact>(id);
-      if ($currentUser?.role !== 'admin' && $currentUser?.id !== c.added_by) {
-        toasts.error("You can't edit this contact");
-        goto(`/contacts/${id}`);
-        return;
-      }
       name = c.name ?? '';
       org = c.org ?? '';
       designation = c.designation ?? '';
@@ -88,7 +57,11 @@
       fu_roles_other = c.fu_roles_other ?? '';
       topics_other = c.topics_other ?? '';
       topics = c.topics ?? [];
-      existingPhotoUrl = photoUrl(c, '100x100');
+      original = {
+        name, org, designation, city, country, email, mobile,
+        secondary_email, secondary_mobile, how_you_know, linkedin,
+        fu_roles: [...fu_roles], fu_roles_other, topics: [...topics], topics_other,
+      };
     } catch {
       toasts.error('Contact not found');
       goto('/contacts');
@@ -108,12 +81,53 @@
     }
   });
 
+  const roleLabel = (v: string) => FU_ROLES.find((r) => r.value === v)?.label ?? v;
+  const topicLabel = (v: string) => TOPICS.find((t) => t.value === v)?.label ?? v;
+
+  // Diff the current form values against the loaded snapshot, with friendly
+  // labels, so the audit log records what actually changed.
+  function computeChanges(): ContactLogChange[] {
+    const out: ContactLogChange[] = [];
+    const scalar = (field: string, a: unknown, b: string) => {
+      const from = String(a ?? '').trim();
+      const to = b.trim();
+      if (from !== to) out.push({ field, from: from || '—', to: to || '—' });
+    };
+    scalar('Name', original.name, name);
+    scalar('Organisation', original.org, org);
+    scalar('Designation', original.designation, designation);
+    scalar('City', original.city, city);
+    scalar('Country', original.country, country);
+    scalar('Email', original.email, email);
+    scalar('Mobile', original.mobile, mobile);
+    scalar('Secondary email', original.secondary_email, secondary_email);
+    scalar('Secondary mobile', original.secondary_mobile, secondary_mobile);
+    scalar('LinkedIn', original.linkedin, linkedin);
+
+    // how_you_know is rich text — diff/show its plain-text form.
+    const hykFrom = htmlToText(String(original.how_you_know ?? ''));
+    const hykTo = htmlToText(how_you_know);
+    if (hykFrom !== hykTo) out.push({ field: 'How you know them', from: hykFrom || '—', to: hykTo || '—' });
+
+    const rolesFrom = [...((original.fu_roles as string[]) ?? [])].sort().map(roleLabel).join(', ');
+    const rolesTo = [...fu_roles].sort().map(roleLabel).join(', ');
+    if (rolesFrom !== rolesTo) out.push({ field: 'FOSS United roles', from: rolesFrom || '—', to: rolesTo || '—' });
+    scalar('Other role', original.fu_roles_other, fu_roles.includes('other') ? fu_roles_other : '');
+
+    const topicsFrom = [...((original.topics as string[]) ?? [])].sort().map(topicLabel).join(', ');
+    const topicsTo = [...topics].sort().map(topicLabel).join(', ');
+    if (topicsFrom !== topicsTo) out.push({ field: 'Topics', from: topicsFrom || '—', to: topicsTo || '—' });
+    scalar('Other topic', original.topics_other, topics.includes('other') ? topics_other : '');
+
+    return out;
+  }
+
   function validate() {
     errors = {};
     if (!name.trim() && !org.trim()) errors.identity = 'Either Name or Organisation is required.';
     if (!email.trim() && !mobile.trim()) errors.contact = 'Either Email or Mobile is required.';
     if (email.trim() && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim())) errors.email = 'Enter a valid email address.';
-    if (!how_you_know.trim()) errors.how_you_know = 'Tell us how you know them.';
+    if (!htmlToText(how_you_know).trim()) errors.how_you_know = 'Tell us how you know them.';
     if (fu_roles.length === 0) errors.fu_roles = 'Select at least one way they can be part of FOSS United.';
     if (topics.length === 0) errors.topics = 'Select at least one area of interest.';
     if (fu_roles.includes('other') && !fu_roles_other.trim()) errors.fu_roles_other = 'Please specify the other role.';
@@ -135,16 +149,26 @@
       fd.append('mobile', mobile.trim());
       fd.append('secondary_email', secondary_email.trim());
       fd.append('secondary_mobile', secondary_mobile.trim());
-      fd.append('how_you_know', how_you_know.trim());
+      fd.append('how_you_know', sanitizeHtml(how_you_know));
       fd.append('linkedin', linkedin.trim());
       fu_roles.forEach((r) => fd.append('fu_roles', r));
       topics.forEach((t) => fd.append('topics', t));
       fd.append('fu_roles_other', fu_roles.includes('other') ? fu_roles_other.trim() : '');
       fd.append('topics_other', topics.includes('other') ? topics_other.trim() : '');
-      if (photoFile) fd.append('photo', photoFile);
-      else if (photoRemoved) fd.append('photo', '');
 
       await pb.collection('contacts').update(id, fd);
+
+      // Record what changed (editor is forced server-side). Best-effort —
+      // a logging failure must not block the save.
+      const changes = computeChanges();
+      if (changes.length) {
+        try {
+          await pb.collection('contact_logs').create({ contact: id, changes });
+        } catch {
+          /* non-fatal */
+        }
+      }
+
       toasts.success('Contact updated');
       goto(`/contacts/${id}`);
     } catch (e: unknown) {
@@ -202,30 +226,6 @@
             <label for="designation" class="label">Designation <span class="text-neutral-400 normal-case font-normal">(optional)</span></label>
             <input id="designation" type="text" bind:value={designation} class="input" placeholder="Software Engineer" />
           </div>
-          <div class="sm:col-span-2">
-            <span class="label">Photo <span class="text-neutral-400 normal-case font-normal">(optional, max 5 MB)</span></span>
-            <div class="flex items-center gap-4 mt-1">
-              {#if shownPhoto}
-                <img src={shownPhoto} alt="Preview" class="w-16 h-16 rounded-full object-cover" />
-              {:else}
-                <div class="w-16 h-16 rounded-full bg-neutral-100 dark:bg-neutral-800 flex items-center justify-center text-neutral-400">
-                  <svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
-                    <path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/>
-                  </svg>
-                </div>
-              {/if}
-              <div class="flex items-center gap-2">
-                <label class="btn-secondary text-xs py-1.5 cursor-pointer">
-                  {shownPhoto ? 'Change photo' : 'Upload photo'}
-                  <input type="file" accept="image/jpeg,image/png,image/webp,image/gif" on:change={onPhotoChange} class="hidden" />
-                </label>
-                {#if shownPhoto}
-                  <button type="button" on:click={removePhoto} class="btn-ghost text-xs py-1.5 text-red-500">Remove</button>
-                {/if}
-              </div>
-            </div>
-            {#if errors.photo}<p class="text-xs text-red-500 mt-1">{errors.photo}</p>{/if}
-          </div>
         </div>
       </div>
 
@@ -279,7 +279,7 @@
 
       <div class="card p-5">
         <label for="how" class="label">How do you know them? *</label>
-        <textarea id="how" bind:value={how_you_know} class="input resize-none {errors.how_you_know ? 'ring-2 ring-red-400' : ''}" rows="3"></textarea>
+        <RichTextEditor id="how" bind:value={how_you_know} invalid={!!errors.how_you_know} />
         {#if errors.how_you_know}<p class="text-xs text-red-500 mt-1">{errors.how_you_know}</p>{/if}
       </div>
 

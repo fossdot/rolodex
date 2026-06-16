@@ -6,6 +6,7 @@
   import { ACTIVITY_TYPES } from '$lib/constants';
   import Avatar from '$lib/components/Avatar.svelte';
   import Reactions from '$lib/components/Reactions.svelte';
+  import RichText from '$lib/components/RichText.svelte';
 
   type Period = 'week' | 'month' | 'quarter' | 'year' | 'all' | 'custom';
   let period: Period = 'month';
@@ -166,7 +167,7 @@
   <title>Activities · Rolodex</title>
 </svelte:head>
 
-<div class="px-6 py-6 max-w-6xl mx-auto">
+<div class="px-6 py-6 max-w-7xl mx-auto">
   <!-- Header -->
   <div class="flex items-center justify-between mb-6 flex-wrap gap-3">
     <div>
@@ -256,7 +257,7 @@
   {:else}
     <div class="grid grid-cols-1 lg:grid-cols-5 gap-6">
       <!-- Activities timeline -->
-      <div class="lg:col-span-3">
+      <div class="lg:col-span-3 min-w-0">
         {#each Object.entries(grouped) as [month, items]}
           <div class="mb-6">
             <h2 class="text-xs font-semibold text-neutral-400 dark:text-neutral-500 uppercase tracking-wider mb-2 sticky top-0 bg-white dark:bg-neutral-950 py-1.5">
@@ -304,7 +305,7 @@
                         {#if act.notes}
                           <div>
                             <p class="text-[10px] font-semibold text-neutral-400 dark:text-neutral-500 uppercase tracking-wider mb-1">Notes</p>
-                            <p class="text-sm text-neutral-700 dark:text-neutral-300 leading-relaxed whitespace-pre-wrap">{act.notes}</p>
+                            <RichText value={act.notes} extraClass="text-sm text-neutral-700 dark:text-neutral-300" />
                           </div>
                         {/if}
                         <div class="flex flex-wrap items-center gap-x-5 gap-y-2 text-xs">
@@ -345,7 +346,7 @@
       </div>
 
       <!-- Active contacts -->
-      <div class="lg:col-span-2">
+      <div class="lg:col-span-2 min-w-0">
         <h2 class="text-xs font-semibold text-neutral-400 dark:text-neutral-500 uppercase tracking-wider mb-2 py-1.5">
           Active Contacts <span class="font-normal">· {activeContacts.length}</span>
         </h2>

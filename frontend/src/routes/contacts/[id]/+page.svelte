@@ -4,11 +4,14 @@
   import { goto } from '$app/navigation';
   import { pb, photoUrl } from '$lib/pb';
   import { currentUser, toasts } from '$lib/stores';
-  import type { Contact, Activity, Reaction, User } from '$lib/types';
+  import type { Contact, Activity, Reaction, User, ContactLog } from '$lib/types';
   import { FU_ROLES, TOPICS, ACTIVITY_TYPES } from '$lib/constants';
   import Avatar from '$lib/components/Avatar.svelte';
   import Lightbox from '$lib/components/Lightbox.svelte';
   import Reactions from '$lib/components/Reactions.svelte';
+  import RichText from '$lib/components/RichText.svelte';
+  import RichTextEditor from '$lib/components/RichTextEditor.svelte';
+  import { sanitizeHtml, htmlToText } from '$lib/sanitizeHtml';
 
   let contact: Contact | null = null;
   let activities: Activity[] = [];
@@ -27,6 +30,20 @@
   $: id = $page.params.id ?? '';
 
   let reactionsByActivity: Record<string, Reaction[]> = {};
+  let logs: ContactLog[] = [];
+
+  async function loadLogs() {
+    try {
+      const r = await pb.collection('contact_logs').getList<ContactLog>(1, 100, {
+        filter: `contact = '${id}'`,
+        sort: '-created',
+        expand: 'editor',
+      });
+      logs = r.items;
+    } catch {
+      /* non-fatal — history just doesn't render */
+    }
+  }
 
   async function loadReactions(activityIds: string[]) {
     if (!activityIds.length) {
@@ -58,6 +75,7 @@
         }).then((r) => r.items),
       ]);
       loadReactions(activities.map((a) => a.id));
+      loadLogs();
     } catch {
       toasts.error('Contact not found');
       goto('/contacts');
@@ -81,7 +99,7 @@
     actErrors = {};
     if (!actType) actErrors.type = 'Select an activity type.';
     if (!actEvent.trim()) actErrors.event = 'Event / context is required.';
-    if (!actNotes.trim()) actErrors.notes = 'Notes are required.';
+    if (!htmlToText(actNotes).trim()) actErrors.notes = 'Notes are required.';
     if (Object.keys(actErrors).length) return;
 
     actSaving = true;
@@ -92,7 +110,7 @@
         event_name: actEvent.trim(),
         event_link: actLink.trim(),
         date: actDate,
-        notes: actNotes.trim(),
+        notes: sanitizeHtml(actNotes),
         logged_by: $currentUser?.id,
       });
       const expanded = await pb.collection('activities').getOne<Activity>(newAct.id, { expand: 'logged_by' });
@@ -135,7 +153,9 @@
     }
   }
 
-  $: canEditContact = contact && ($currentUser?.role === 'admin' || (!contact.deleted_at && $currentUser?.id === contact.added_by));
+  // Editing is open to every signed-in employee; only the creator can delete.
+  $: canEditContact = !!contact && ($currentUser?.role === 'admin' || !contact.deleted_at);
+  $: canDeleteContact = !!contact && !contact.deleted_at && $currentUser?.id === contact.added_by;
   // Anyone signed in — employees and directors alike — can log activities
   // on any contact. Engagement is shared; logged_by is forced to self.
   $: canLogActivity = !!$currentUser && !contact?.deleted_at;
@@ -168,6 +188,19 @@
   function formatDate(d: string) {
     if (!d) return '—';
     return new Date(d).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' });
+  }
+
+  function formatIST(d: string) {
+    if (!d) return '';
+    return new Date(d).toLocaleString('en-IN', {
+      timeZone: 'Asia/Kolkata',
+      day: 'numeric', month: 'short', year: 'numeric',
+      hour: '2-digit', minute: '2-digit', hour12: true,
+    });
+  }
+
+  function editorName(log: ContactLog) {
+    return log.expand?.editor?.name || log.expand?.editor?.email || 'Unknown';
   }
 </script>
 
@@ -219,15 +252,17 @@
           {/if}
         </div>
       </div>
-      {#if canEditContact}
+      {#if canEditContact || canDeleteContact}
         <div class="flex items-center gap-2">
-          <a href="/contacts/{id}/edit" class="btn-secondary">
-            <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-              <path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"/>
-            </svg>
-            Edit
-          </a>
-          {#if !contact.deleted_at}
+          {#if canEditContact}
+            <a href="/contacts/{id}/edit" class="btn-secondary">
+              <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"/>
+              </svg>
+              Edit
+            </a>
+          {/if}
+          {#if canDeleteContact}
             <button on:click={deleteContact} class="btn-ghost p-2 text-red-500 hover:bg-red-50 dark:hover:bg-red-950">
               <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                 <path d="M3 6h18M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/>
@@ -256,7 +291,7 @@
 
     <div class="grid grid-cols-1 lg:grid-cols-5 gap-5">
       <!-- Left: contact details -->
-      <div class="lg:col-span-2 space-y-4">
+      <div class="lg:col-span-2 min-w-0 space-y-4">
         <div class="card p-5 space-y-4">
           <h2 class="text-xs font-semibold text-neutral-500 dark:text-neutral-400 uppercase tracking-wider">Contact</h2>
           <div class="space-y-3">
@@ -321,7 +356,7 @@
         {#if contact.how_you_know}
           <div class="card p-5">
             <h2 class="text-xs font-semibold text-neutral-500 dark:text-neutral-400 uppercase tracking-wider mb-2">How you know them</h2>
-            <p class="text-sm text-neutral-700 dark:text-neutral-300 leading-relaxed">{contact.how_you_know}</p>
+            <RichText value={contact.how_you_know} extraClass="text-sm text-neutral-700 dark:text-neutral-300" />
           </div>
         {/if}
 
@@ -368,7 +403,7 @@
       </div>
 
       <!-- Right: activities -->
-      <div class="lg:col-span-3">
+      <div class="lg:col-span-3 min-w-0">
         <div class="flex items-center justify-between mb-3">
           <h2 class="text-sm font-semibold text-neutral-900 dark:text-neutral-100">
             Activities
@@ -444,7 +479,7 @@
               </div>
               <div class="sm:col-span-2">
                 <label for="act-notes" class="label">Notes *</label>
-                <textarea id="act-notes" bind:value={actNotes} class="input resize-none {actErrors.notes ? 'ring-2 ring-red-400' : ''}" rows="2" placeholder="What happened, follow-ups, context…"></textarea>
+                <RichTextEditor id="act-notes" bind:value={actNotes} invalid={!!actErrors.notes} placeholder="What happened, follow-ups, context…" />
                 {#if actErrors.notes}<p class="text-xs text-red-500 mt-1">{actErrors.notes}</p>{/if}
               </div>
             </div>
@@ -494,7 +529,7 @@
                     </p>
                   {/if}
                   {#if activity.notes}
-                    <p class="text-xs text-neutral-600 dark:text-neutral-400 mt-1 leading-relaxed">{activity.notes}</p>
+                    <RichText value={activity.notes} extraClass="text-xs text-neutral-600 dark:text-neutral-400 mt-1" />
                   {/if}
                   <p class="text-[11px] text-neutral-400 dark:text-neutral-500 mt-1.5">
                     by {activity.expand?.logged_by?.name || activity.expand?.logged_by?.email || 'Unknown'}
@@ -514,6 +549,32 @@
         {/if}
       </div>
     </div>
+
+    {#if logs.length}
+      <div class="mt-8 pt-6 border-t border-neutral-100 dark:border-neutral-800">
+        <h2 class="text-xs font-semibold text-neutral-500 dark:text-neutral-400 uppercase tracking-wider mb-4">Edit History</h2>
+        <div>
+          {#each logs as log (log.id)}
+            <div class="flex flex-col sm:flex-row sm:gap-6 py-3 border-b border-neutral-100 dark:border-neutral-800 last:border-0">
+              <p class="text-xs text-neutral-500 dark:text-neutral-400 sm:w-56 shrink-0 mb-1 sm:mb-0">
+                <span class="font-medium text-neutral-700 dark:text-neutral-300">{editorName(log)}</span>
+                <span class="block sm:mt-0.5">{formatIST(log.created)}</span>
+              </p>
+              <ul class="flex-1 min-w-0 text-xs space-y-1">
+                {#each log.changes ?? [] as ch}
+                  <li class="leading-relaxed break-words">
+                    <span class="font-medium text-neutral-600 dark:text-neutral-300">{ch.field}:</span>
+                    <span class="text-neutral-400 dark:text-neutral-500 line-through">{ch.from}</span>
+                    <span class="text-neutral-400 dark:text-neutral-500"> → </span>
+                    <span class="text-neutral-700 dark:text-neutral-200">{ch.to}</span>
+                  </li>
+                {/each}
+              </ul>
+            </div>
+          {/each}
+        </div>
+      </div>
+    {/if}
   </div>
 
   <Lightbox bind:open={lightboxOpen} src={lightboxSrc} alt={displayName(contact)} />

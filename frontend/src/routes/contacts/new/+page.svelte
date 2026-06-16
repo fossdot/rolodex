@@ -7,6 +7,8 @@
   import CityInput from '$lib/components/CityInput.svelte';
   import OrgInput from '$lib/components/OrgInput.svelte';
   import MultiSelect from '$lib/components/MultiSelect.svelte';
+  import RichTextEditor from '$lib/components/RichTextEditor.svelte';
+  import { sanitizeHtml, htmlToText } from '$lib/sanitizeHtml';
 
   let name = '';
   let org = '';
@@ -23,30 +25,6 @@
   let fu_roles_other = '';
   let topics: string[] = [];
   let topics_other = '';
-
-  // Photo upload
-  let photoFile: File | null = null;
-  let photoPreview = '';
-  const MAX_PHOTO_BYTES = 5 * 1024 * 1024;
-
-  function onPhotoChange(e: Event) {
-    const file = (e.target as HTMLInputElement).files?.[0];
-    if (!file) return;
-    if (file.size > MAX_PHOTO_BYTES) {
-      errors = { ...errors, photo: 'Photo must be 5 MB or smaller.' };
-      return;
-    }
-    delete errors.photo;
-    photoFile = file;
-    if (photoPreview) URL.revokeObjectURL(photoPreview);
-    photoPreview = URL.createObjectURL(file);
-  }
-
-  function removePhoto() {
-    photoFile = null;
-    if (photoPreview) URL.revokeObjectURL(photoPreview);
-    photoPreview = '';
-  }
 
   // Org autocomplete: suggest spellings already in the database
   let orgSuggestions: string[] = [];
@@ -70,7 +48,7 @@
     if (!name.trim() && !org.trim()) errors.identity = 'Either Name or Organisation is required.';
     if (!email.trim() && !mobile.trim()) errors.contact = 'Either Email or Mobile is required.';
     if (email.trim() && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim())) errors.email = 'Enter a valid email address.';
-    if (!how_you_know.trim()) errors.how_you_know = 'Tell us how you know them.';
+    if (!htmlToText(how_you_know).trim()) errors.how_you_know = 'Tell us how you know them.';
     if (fu_roles.length === 0) errors.fu_roles = 'Select at least one way they can be part of FOSS United.';
     if (topics.length === 0) errors.topics = 'Select at least one area of interest.';
     if (fu_roles.includes('other') && !fu_roles_other.trim()) errors.fu_roles_other = 'Please specify the other role.';
@@ -93,14 +71,13 @@
       fd.append('mobile', mobile.trim());
       fd.append('secondary_email', secondary_email.trim());
       fd.append('secondary_mobile', secondary_mobile.trim());
-      fd.append('how_you_know', how_you_know.trim());
+      fd.append('how_you_know', sanitizeHtml(how_you_know));
       fd.append('linkedin', linkedin.trim());
       fu_roles.forEach((r) => fd.append('fu_roles', r));
       topics.forEach((t) => fd.append('topics', t));
       fd.append('fu_roles_other', fu_roles.includes('other') ? fu_roles_other.trim() : '');
       fd.append('topics_other', topics.includes('other') ? topics_other.trim() : '');
       fd.append('added_by', $currentUser?.id ?? '');
-      if (photoFile) fd.append('photo', photoFile);
 
       await pb.collection('contacts').create(fd);
       toasts.success('Contact added successfully');
@@ -154,30 +131,6 @@
         <div class="sm:col-span-2">
           <label for="designation" class="label">Designation <span class="text-neutral-400 normal-case font-normal">(optional)</span></label>
           <input id="designation" type="text" bind:value={designation} class="input" placeholder="Software Engineer" />
-        </div>
-        <div class="sm:col-span-2">
-          <span class="label">Photo <span class="text-neutral-400 normal-case font-normal">(optional, max 5 MB)</span></span>
-          <div class="flex items-center gap-4 mt-1">
-            {#if photoPreview}
-              <img src={photoPreview} alt="Preview" class="w-16 h-16 rounded-full object-cover" />
-            {:else}
-              <div class="w-16 h-16 rounded-full bg-neutral-100 dark:bg-neutral-800 flex items-center justify-center text-neutral-400">
-                <svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
-                  <path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/>
-                </svg>
-              </div>
-            {/if}
-            <div class="flex items-center gap-2">
-              <label class="btn-secondary text-xs py-1.5 cursor-pointer">
-                {photoPreview ? 'Change photo' : 'Upload photo'}
-                <input type="file" accept="image/jpeg,image/png,image/webp,image/gif" on:change={onPhotoChange} class="hidden" />
-              </label>
-              {#if photoPreview}
-                <button type="button" on:click={removePhoto} class="btn-ghost text-xs py-1.5 text-red-500">Remove</button>
-              {/if}
-            </div>
-          </div>
-          {#if errors.photo}<p class="text-xs text-red-500 mt-1">{errors.photo}</p>{/if}
         </div>
       </div>
     </div>
@@ -242,7 +195,7 @@
       <h2 class="text-sm font-semibold text-neutral-900 dark:text-neutral-100">Context</h2>
       <div>
         <label for="how-you-know" class="label">How do you know them? *</label>
-        <textarea id="how-you-know" bind:value={how_you_know} class="input resize-none {errors.how_you_know ? 'ring-2 ring-red-400' : ''}" rows="3" placeholder="Met at IndiaFOSS 2024, connected through Mozilla community…"></textarea>
+        <RichTextEditor id="how-you-know" bind:value={how_you_know} invalid={!!errors.how_you_know} placeholder="Met at IndiaFOSS 2024, connected through Mozilla community…" />
         {#if errors.how_you_know}<p class="text-xs text-red-500 mt-1">{errors.how_you_know}</p>{/if}
       </div>
     </div>

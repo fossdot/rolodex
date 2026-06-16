@@ -17,8 +17,10 @@
     ? suggestions.filter((o) => o.toLowerCase().includes(value.toLowerCase()) && o !== value).slice(0, 9)
     : [];
 
+  // Close when nothing matches. Opening happens only on user typing (below),
+  // never reactively — otherwise a pre-filled value would pop the dropdown
+  // open on the edit page load.
   $: if (matches.length === 0) open = false;
-  $: if (matches.length > 0 && value.trim()) open = true;
 
   function pick(org: string) {
     value = org;
@@ -56,6 +58,7 @@
     {id}
     type="text"
     bind:value
+    on:input={() => { open = true; highlighted = -1; }}
     on:blur={handleBlur}
     on:keydown={handleKeydown}
     {placeholder}

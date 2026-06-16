@@ -13,8 +13,10 @@
     ? CITIES.filter((c) => c.toLowerCase().includes(value.toLowerCase())).slice(0, 9)
     : [];
 
+  // Close when nothing matches. Opening happens only on user typing (below),
+  // never reactively — otherwise a pre-filled value (e.g. on the edit page)
+  // would pop the dropdown open on load.
   $: if (suggestions.length === 0) open = false;
-  $: if (suggestions.length > 0 && value.trim()) open = true;
 
   function pick(city: string) {
     value = city;
@@ -53,6 +55,7 @@
     {id}
     type="text"
     bind:value
+    on:input={() => { open = true; highlighted = -1; }}
     on:blur={handleBlur}
     on:keydown={handleKeydown}
     {placeholder}

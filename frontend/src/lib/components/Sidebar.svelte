@@ -80,8 +80,21 @@
     {/if}
   </nav>
 
-  <!-- Footer: user + theme -->
+  <!-- Footer: import + user + theme -->
   <div class="px-3 py-4 border-t border-neutral-100 dark:border-neutral-800 space-y-2">
+    <a
+      href="/contacts/import"
+      class="flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-all duration-100
+        {currentPath === '/contacts/import'
+          ? 'bg-neutral-900 dark:bg-white text-white dark:text-neutral-900'
+          : 'text-neutral-600 dark:text-neutral-400 hover:bg-neutral-100 dark:hover:bg-neutral-900 hover:text-neutral-900 dark:hover:text-neutral-100'}"
+    >
+      <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M12 3v12"/><path d="m8 11 4 4 4-4"/><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+      </svg>
+      Import Contacts
+    </a>
+
     <div class="flex items-center gap-2 px-2 py-1.5">
       <Avatar name={$currentUser?.name || $currentUser?.email || ''} size="sm" />
       <div class="flex-1 min-w-0">

@@ -3,6 +3,15 @@ pocketbase/pocketbase
 pocketbase/pb_data/
 pocketbase/*.zip
 
+# Local-only migrations — these DISABLE MFA and must never reach production
+# (production keeps MFA enabled). Kept local for password login without SMTP.
+pocketbase/pb_migrations/1781506452_updated_users.js
+pocketbase/pb_migrations/1781700000_disable_mfa_local.js
+
+# Local/ops scripts — kept out of the repo
+pocketbase/seed.mjs
+pocketbase/purge_dummy.mjs
+
 # Frontend
 frontend/node_modules/
 frontend/.svelte-kit/

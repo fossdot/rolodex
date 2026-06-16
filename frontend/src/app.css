@@ -66,4 +66,34 @@
   .divider {
     @apply border-t border-neutral-100 dark:border-neutral-800;
   }
+
+  /* Rich-text content (editor + rendered view). Tailwind's preflight strips
+     list styling, so restore the few tags the sanitizer allows. */
+  .richtext {
+    @apply leading-relaxed break-words;
+  }
+  .richtext ul {
+    @apply list-disc pl-5 my-1;
+  }
+  .richtext ol {
+    @apply list-decimal pl-5 my-1;
+  }
+  .richtext li {
+    @apply my-0.5;
+  }
+  .richtext a {
+    @apply text-accent dark:text-accent-dark underline;
+  }
+  .richtext strong,
+  .richtext b {
+    @apply font-semibold;
+  }
+  .richtext em,
+  .richtext i {
+    @apply italic;
+  }
+  .richtext[contenteditable]:empty::before {
+    content: attr(data-placeholder);
+    @apply text-neutral-400 dark:text-neutral-500;
+  }
 }

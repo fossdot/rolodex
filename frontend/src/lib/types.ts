@@ -48,6 +48,23 @@ export interface Reaction {
   created: string;
 }
 
+export interface ContactLogChange {
+  field: string;
+  from: string;
+  to: string;
+}
+
+export interface ContactLog {
+  id: string;
+  contact: string;
+  editor: string;
+  changes: ContactLogChange[];
+  expand?: {
+    editor?: User;
+  };
+  created: string;
+}
+
 export interface Activity {
   id: string;
   contact: string;

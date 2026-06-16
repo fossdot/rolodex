@@ -20,13 +20,11 @@
   let filterCity = '';
   let showFilters = false;
   let viewMode: 'grid' | 'list' = 'grid';
-  let showDeleted = false;
 
   async function loadContacts() {
     loading = true;
     try {
-      const isAdmin = $currentUser?.role === 'admin';
-      const filters: string[] = [showDeleted && isAdmin ? 'deleted_at != null' : 'deleted_at = null'];
+      const filters: string[] = ['deleted_at = null'];
       if (scope === 'mine' && $currentUser?.id) {
         // Contacts I added OR have engaged with (logged an activity on) —
         // activities_via_contact is PocketBase's back-relation from contacts
@@ -55,7 +53,7 @@
       const result = await pb.collection('contacts').getList<Contact>(1, 200, {
         filter: filters.join(' && ') || '',
         sort: '-created',
-        expand: showDeleted ? 'added_by,deleted_by' : 'added_by',
+        expand: 'added_by',
       });
       contacts = result.items;
     } catch (e) {
@@ -73,17 +71,7 @@
     debounceTimer = setTimeout(fn, ms);
   }
 
-  $: search, filterRoles, filterTopics, filterCity, showDeleted, debounce(loadContacts);
-
-  async function restoreContact(id: string) {
-    try {
-      await pb.collection('contacts').update(id, { deleted_at: '', deleted_by: '' });
-      contacts = contacts.filter((c) => c.id !== id);
-      toasts.success('Contact restored');
-    } catch {
-      toasts.error('Failed to restore contact');
-    }
-  }
+  $: search, filterRoles, filterTopics, filterCity, debounce(loadContacts);
 
   function toggleRole(v: string) {
     filterRoles = filterRoles.includes(v) ? filterRoles.filter((r) => r !== v) : [...filterRoles, v];
@@ -96,7 +84,6 @@
     filterRoles = [];
     filterTopics = [];
     filterCity = '';
-    showDeleted = false;
   }
 
   $: activeFilters = filterRoles.length + filterTopics.length + (filterCity ? 1 : 0);
@@ -118,7 +105,7 @@
     <div>
       <h1 class="text-xl font-semibold text-neutral-900 dark:text-neutral-50 tracking-tight">{title}</h1>
       <p class="text-sm text-neutral-500 dark:text-neutral-400 mt-0.5">
-        {loading ? '—' : contacts.length} {showDeleted ? 'deleted contacts' : subtitle}
+        {loading ? '—' : contacts.length} {subtitle}
       </p>
     </div>
     <a href="/contacts/new" class="btn-primary shrink-0 whitespace-nowrap px-3 py-1.5 text-xs sm:px-4 sm:py-2 sm:text-sm">
@@ -155,18 +142,6 @@
         <span class="w-4 h-4 bg-accent dark:bg-accent-dark text-white text-[10px] font-bold rounded-full flex items-center justify-center">{activeFilters}</span>
       {/if}
     </button>
-
-    {#if $currentUser?.role === 'admin'}
-      <button
-        on:click={() => (showDeleted = !showDeleted)}
-        class="btn-secondary gap-2 {showDeleted ? 'border-red-400 dark:border-red-600 text-red-600 dark:text-red-400' : ''}"
-      >
-        <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-          <path d="M3 6h18M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/>
-        </svg>
-        {showDeleted ? 'Showing Deleted' : 'Deleted'}
-      </button>
-    {/if}
 
     <!-- View toggle -->
     <div class="flex border border-neutral-200 dark:border-neutral-700 rounded-lg overflow-hidden">
@@ -285,7 +260,7 @@
   {:else if viewMode === 'grid'}
     <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
       {#each contacts as contact (contact.id)}
-        <div class="card p-4 transition-all duration-150 {contact.deleted_at ? 'opacity-70 border-red-200 dark:border-red-900' : 'hover:shadow-md hover:border-neutral-200 dark:hover:border-neutral-700'}">
+        <div class="card p-4 transition-all duration-150 hover:shadow-md hover:border-neutral-200 dark:hover:border-neutral-700">
           <a href="/contacts/{contact.id}" class="group block">
             <div class="flex items-start gap-3 mb-3">
               <Avatar name={displayName(contact)} src={photoUrl(contact, '100x100')} />
@@ -312,10 +287,7 @@
             {/if}
 
             <div class="flex flex-wrap gap-1">
-              {#if contact.deleted_at}
-                <span class="badge bg-red-100 dark:bg-red-950 text-red-600 dark:text-red-400">Deleted</span>
-              {/if}
-              {#each (contact.fu_roles ?? []).slice(0, contact.deleted_at ? 1 : 2) as role}
+              {#each (contact.fu_roles ?? []).slice(0, 2) as role}
                 <span class="badge-green">{roleBadge(contact, role)}</span>
               {/each}
               {#if (contact.fu_roles?.length ?? 0) > 2}
@@ -329,14 +301,6 @@
               </p>
             {/if}
           </a>
-          {#if contact.deleted_at}
-            <div class="mt-2.5 pt-2.5 border-t border-red-100 dark:border-red-900 flex items-center justify-between">
-              <p class="text-[11px] text-neutral-400 dark:text-neutral-500 truncate">
-                by {contact.expand?.deleted_by?.name || contact.expand?.deleted_by?.email || '?'}
-              </p>
-              <button on:click={() => restoreContact(contact.id)} class="text-xs text-accent dark:text-accent-dark hover:underline shrink-0 ml-2">Restore</button>
-            </div>
-          {/if}
         </div>
       {/each}
     </div>
@@ -345,7 +309,7 @@
   {:else}
     <div class="card divide-y divide-neutral-100 dark:divide-neutral-800">
       {#each contacts as contact (contact.id)}
-        <div class="flex items-center gap-4 px-4 py-3 {contact.deleted_at ? 'opacity-70' : 'hover:bg-neutral-50 dark:hover:bg-neutral-900'} transition-colors group">
+        <div class="flex items-center gap-4 px-4 py-3 hover:bg-neutral-50 dark:hover:bg-neutral-900 transition-colors group">
           <a href="/contacts/{contact.id}" class="flex items-center gap-4 flex-1 min-w-0">
           <Avatar name={displayName(contact)} size="sm" src={photoUrl(contact, '100x100')} />
           <!-- phones: name+org · tablets: +roles · desktop: all four columns -->
@@ -355,9 +319,6 @@
                 <p class="text-sm font-medium text-neutral-900 dark:text-neutral-100 truncate group-hover:text-accent dark:group-hover:text-accent-dark transition-colors">
                   {contact.name || '—'}
                 </p>
-                {#if contact.deleted_at}
-                  <span class="badge bg-red-100 dark:bg-red-950 text-red-600 dark:text-red-400 shrink-0">Deleted</span>
-                {/if}
               </div>
               {#if contact.org}
                 <p class="text-xs text-neutral-500 dark:text-neutral-400 truncate">{contact.org}</p>
@@ -380,9 +341,6 @@
             <path d="m9 18 6-6-6-6"/>
           </svg>
           </a>
-          {#if contact.deleted_at}
-            <button on:click={() => restoreContact(contact.id)} class="btn-secondary text-xs py-1.5 shrink-0 ml-2">Restore</button>
-          {/if}
         </div>
       {/each}
     </div>

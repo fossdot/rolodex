@@ -3,7 +3,7 @@
   import { goto } from '$app/navigation';
   import { pb } from '$lib/pb';
   import { currentUser, toasts } from '$lib/stores';
-  import type { Activity, User } from '$lib/types';
+  import type { Activity, User, Contact } from '$lib/types';
   import { ACTIVITY_TYPES } from '$lib/constants';
   import Avatar from '$lib/components/Avatar.svelte';
 
@@ -15,6 +15,43 @@
 
   let recentActivities: Activity[] = [];
   let leaderboard: { user: User; contacts: number; activities: number; score: number }[] = [];
+
+  // Deleted contacts — viewing/restoring lives here (not in Contacts/Rolodex),
+  // toggled by the red trash icon in the header.
+  let showDeleted = false;
+  let deletedContacts: Contact[] = [];
+  let deletedLoading = false;
+
+  async function loadDeleted() {
+    deletedLoading = true;
+    try {
+      const r = await pb.collection('contacts').getList<Contact>(1, 200, {
+        filter: 'deleted_at != null',
+        sort: '-deleted_at',
+        expand: 'added_by,deleted_by',
+      });
+      deletedContacts = r.items;
+    } catch {
+      toasts.error('Failed to load deleted contacts');
+    } finally {
+      deletedLoading = false;
+    }
+  }
+
+  function toggleDeleted() {
+    showDeleted = !showDeleted;
+    if (showDeleted) loadDeleted();
+  }
+
+  async function restoreContact(id: string) {
+    try {
+      await pb.collection('contacts').update(id, { deleted_at: '', deleted_by: '' });
+      deletedContacts = deletedContacts.filter((c) => c.id !== id);
+      toasts.success('Contact restored');
+    } catch {
+      toasts.error('Failed to restore contact');
+    }
+  }
 
   // Custom date range — empty inputs mean "all time". Contacts are filtered
   // by when they were added (created); activities by when they happened (date),
@@ -172,13 +209,16 @@
     <!-- Header -->
     <div class="flex items-end justify-between mb-6 flex-wrap gap-3">
       <div>
-        <h1 class="text-xl font-semibold text-neutral-900 dark:text-neutral-50 tracking-tight">Dashboard</h1>
+        <h1 class="text-xl font-semibold text-neutral-900 dark:text-neutral-50 tracking-tight">{showDeleted ? 'Deleted Contacts' : 'Dashboard'}</h1>
         <p class="text-sm text-neutral-500 dark:text-neutral-400 mt-0.5">
-          Network engagement {startDate || endDate ? 'in the selected period' : 'overview · all time'}
+          {#if showDeleted}Soft-deleted contacts — restore to bring them back{:else}Network engagement {startDate || endDate ? 'in the selected period' : 'overview · all time'}{/if}
         </p>
       </div>
-      <!-- Date range filter — drives the stats and the leaderboard -->
-      <div class="flex flex-col items-end gap-2">
+
+      <div class="flex items-start gap-2">
+        {#if !showDeleted}
+        <!-- Date range filter — drives the stats and the leaderboard -->
+        <div class="flex flex-col items-end gap-2">
         <div class="flex items-center gap-2">
           <select
             bind:value={monthSel}
@@ -224,10 +264,67 @@
             <input type="date" bind:value={endDate} on:input={onManualDateInput} class="input py-1.5 text-xs w-auto" title="To" />
           </div>
         {/if}
+        </div>
+        {/if}
+        <!-- View / restore deleted contacts -->
+        <button
+          on:click={toggleDeleted}
+          class="p-2 rounded-lg border transition-colors shrink-0 {showDeleted
+            ? 'bg-red-600 border-red-600 text-white hover:bg-red-700'
+            : 'border-neutral-200 dark:border-neutral-700 text-red-500 hover:bg-red-50 dark:hover:bg-red-950'}"
+          title={showDeleted ? 'Back to dashboard' : 'View deleted contacts'}
+          aria-label={showDeleted ? 'Back to dashboard' : 'View deleted contacts'}
+        >
+          <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M3 6h18M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/>
+          </svg>
+        </button>
       </div>
     </div>
 
-    {#if loading}
+    {#if showDeleted}
+      <!-- Deleted contacts list -->
+      {#if deletedLoading}
+        <div class="card divide-y divide-neutral-100 dark:divide-neutral-800">
+          {#each Array(5) as _}
+            <div class="flex items-center gap-3 px-4 py-3 animate-pulse">
+              <div class="w-8 h-8 rounded-full bg-neutral-100 dark:bg-neutral-800 shrink-0"></div>
+              <div class="flex-1 space-y-1.5">
+                <div class="h-3.5 bg-neutral-100 dark:bg-neutral-800 rounded w-1/3"></div>
+                <div class="h-3 bg-neutral-100 dark:bg-neutral-800 rounded w-1/2"></div>
+              </div>
+            </div>
+          {/each}
+        </div>
+      {:else if deletedContacts.length === 0}
+        <div class="card flex flex-col items-center justify-center py-16 text-center">
+          <div class="w-12 h-12 rounded-2xl bg-neutral-100 dark:bg-neutral-800 flex items-center justify-center mb-4">
+            <svg class="text-neutral-400" xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M3 6h18M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/>
+            </svg>
+          </div>
+          <p class="text-sm font-medium text-neutral-900 dark:text-neutral-100">No deleted contacts</p>
+          <p class="text-sm text-neutral-400 dark:text-neutral-500 mt-1">Deleted contacts will appear here for restoring</p>
+        </div>
+      {:else}
+        <div class="card divide-y divide-neutral-100 dark:divide-neutral-800">
+          {#each deletedContacts as c (c.id)}
+            <div class="flex items-center gap-3 px-3 sm:px-4 py-3">
+              <Avatar name={c.name || c.org || '?'} size="sm" />
+              <div class="flex-1 min-w-0">
+                <a href="/contacts/{c.id}" class="text-sm font-medium text-neutral-900 dark:text-neutral-100 hover:text-accent dark:hover:text-accent-dark truncate block">
+                  {c.name || c.org || 'Unknown'}
+                </a>
+                <p class="text-xs text-neutral-400 dark:text-neutral-500 truncate">
+                  {c.org ? c.org + ' · ' : ''}deleted by {c.expand?.deleted_by?.name || c.expand?.deleted_by?.email || '?'} on {formatDate(c.deleted_at ?? '')}
+                </p>
+              </div>
+              <button on:click={() => restoreContact(c.id)} class="btn-secondary text-xs py-1.5 shrink-0">Restore</button>
+            </div>
+          {/each}
+        </div>
+      {/if}
+    {:else if loading}
       <div class="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-6">
         {#each Array(3) as _}
           <div class="card p-5 animate-pulse">

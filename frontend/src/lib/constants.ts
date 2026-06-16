@@ -89,6 +89,8 @@ const CITY_NORMALIZATIONS: Record<string, string> = {
   'bhubaneshwar': 'Bhubaneswar',
   // Himachal
   'dharamshala': 'Dharamsala',
+  // Non-geographic
+  'online': 'Online', 'virtual': 'Online', 'remote': 'Online',
 };
 
 export function normalizeCity(raw: string): string {
@@ -97,6 +99,9 @@ export function normalizeCity(raw: string): string {
 }
 
 export const CITIES = [
+  // Non-geographic
+  'Online',
+
   // Tier 1
   'Ahmedabad', 'Bangalore', 'Chennai', 'Delhi', 'Hyderabad', 'Kolkata', 'Mumbai', 'Pune',
 
@@ -190,4 +195,4 @@ export const COUNTRIES = [
 ];
 
 // Must stay in sync with the reactions collection's emoji select values.
-export const REACTION_EMOJIS = ['👍', '❤️', '🎉', '👏', '💯', '🔥'];
+export const REACTION_EMOJIS = ['👍', '❤️', '🎉', '👏', '🔥', '👎'];

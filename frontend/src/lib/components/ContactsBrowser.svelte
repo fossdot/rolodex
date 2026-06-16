@@ -35,7 +35,9 @@
       }
       if (search.trim()) {
         const q = search.trim().replace(/\\/g, '\\\\').replace(/'/g, "\\'");
-        filters.push(`(name ~ '${q}' || org ~ '${q}' || email ~ '${q}' || mobile ~ '${q}' || city ~ '${q}')`);
+        // Also match contacts whose activity notes (comments) contain the query —
+        // activities_via_contact is the back-relation; ?~ matches if ANY row's notes match.
+        filters.push(`(name ~ '${q}' || org ~ '${q}' || email ~ '${q}' || mobile ~ '${q}' || city ~ '${q}' || activities_via_contact.notes ?~ '${q}')`);
       }
       if (filterCity.trim()) {
         const c = filterCity.trim().replace(/\\/g, '\\\\').replace(/'/g, "\\'");
@@ -125,7 +127,7 @@
       <input
         type="search"
         bind:value={search}
-        placeholder="Search name, org, email, mobile, city…"
+        placeholder="Search name, org, email, city, activity notes…"
         class="input pl-9"
       />
     </div>

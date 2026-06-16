@@ -47,9 +47,37 @@
     }
   });
 
-  $: shown = search.trim()
-    ? orgs.filter((o) => o.name.toLowerCase().includes(search.trim().toLowerCase()))
-    : orgs;
+  // A search matches an org by its name, any linked contact (name/email/
+  // mobile/city), or any activity note on those contacts — resolved
+  // server-side, then we show the org groups that have a matching contact.
+  let matchKeys: Set<string> | null = null; // null = no active search
+  let debounceTimer: ReturnType<typeof setTimeout>;
+
+  async function runSearch() {
+    const q = search.trim();
+    if (!q) {
+      matchKeys = null;
+      return;
+    }
+    clearTimeout(debounceTimer);
+    debounceTimer = setTimeout(async () => {
+      const esc = q.replace(/\\/g, '\\\\').replace(/'/g, "\\'");
+      try {
+        const r = await pb.collection('contacts').getList(1, 500, {
+          filter:
+            `deleted_at = null && org != '' && ` +
+            `(org ~ '${esc}' || name ~ '${esc}' || email ~ '${esc}' || mobile ~ '${esc}' || city ~ '${esc}' || activities_via_contact.notes ?~ '${esc}')`,
+          fields: 'org',
+        });
+        matchKeys = new Set(r.items.map((i) => String(i.org).trim().toLowerCase()));
+      } catch {
+        matchKeys = new Set();
+      }
+    }, 300);
+  }
+
+  $: search, runSearch();
+  $: shown = matchKeys === null ? orgs : orgs.filter((o) => matchKeys.has(o.name.toLowerCase()));
 </script>
 
 <svelte:head>
@@ -72,7 +100,7 @@
     <svg class="absolute left-3 top-1/2 -translate-y-1/2 text-neutral-400" xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
       <circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/>
     </svg>
-    <input type="search" bind:value={search} placeholder="Search organisations…" class="input pl-9" />
+    <input type="search" bind:value={search} placeholder="Search org, contact, activity notes…" class="input pl-9" />
   </div>
 
   {#if loading}
@@ -95,7 +123,7 @@
         {search ? 'No organisations match your search' : 'No organisations yet'}
       </p>
       <p class="text-sm text-neutral-400 dark:text-neutral-500 mt-1">
-        {search ? 'Try a different name' : 'Organisations appear as contacts are added'}
+        {search ? 'Try a different search term' : 'Organisations appear as contacts are added'}
       </p>
     </div>
   {:else}

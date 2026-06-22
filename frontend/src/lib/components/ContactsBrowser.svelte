@@ -37,7 +37,7 @@
         const q = search.trim().replace(/\\/g, '\\\\').replace(/'/g, "\\'");
         // Also match contacts whose activity notes (comments) contain the query —
         // activities_via_contact is the back-relation; ?~ matches if ANY row's notes match.
-        filters.push(`(name ~ '${q}' || org ~ '${q}' || email ~ '${q}' || mobile ~ '${q}' || city ~ '${q}' || activities_via_contact.notes ?~ '${q}')`);
+        filters.push(`(name ~ '${q}' || org ~ '${q}' || designation ~ '${q}' || how_you_know ~ '${q}' || email ~ '${q}' || mobile ~ '${q}' || city ~ '${q}' || activities_via_contact.notes ?~ '${q}')`);
       }
       if (filterCity.trim()) {
         const c = filterCity.trim().replace(/\\/g, '\\\\').replace(/'/g, "\\'");

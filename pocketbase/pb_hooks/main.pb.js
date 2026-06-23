@@ -1,6 +1,30 @@
 /// <reference path="../pb_data/types.d.ts" />
 // PocketBase v0.23+ hook API (verified against v0.39).
 
+// Production safety net: keep MFA (email OTP) enabled on the live deployment.
+// MFA on/off lives only in each box's database — locally it is turned off by
+// the gitignored disable_mfa_local migration — so nothing in tracked code
+// guarantees production stays protected. On every boot, if this instance is
+// the production deployment (matched by its configured app URL) and MFA has
+// somehow been turned off, re-enable it and log. Local/dev instances have a
+// different app URL and are left alone, so OTP-free local login still works.
+// Wrapped so a check failure can never prevent the server from starting.
+onBootstrap((e) => {
+    e.next();
+    try {
+        const appURL = String(e.app.settings().meta.appURL || "");
+        if (appURL.indexOf("rolodex.fossunited.org") === -1) return; // not production
+        const users = e.app.findCollectionByNameOrId("_pb_users_auth_");
+        if (!users.mfa.enabled) {
+            unmarshal({ "mfa": { "enabled": true } }, users);
+            e.app.save(users);
+            e.app.logger().warn("Re-enabled MFA on the users collection (production safety net).");
+        }
+    } catch (err) {
+        e.app.logger().warn("MFA production safety-net check failed: " + err);
+    }
+});
+
 // Restrict OAuth2 sign-in to @fossunited.org accounts only.
 onRecordAuthWithOAuth2Request((e) => {
     const email = String(e.oAuth2User?.email ?? "");

@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { base } from '$app/paths';
   import { page } from '$app/stores';
   import { pb, photoUrl } from '$lib/pb';
   import { toasts } from '$lib/stores';
@@ -77,7 +78,7 @@
 <div class="px-6 py-6 max-w-6xl mx-auto">
   <!-- Header -->
   <div class="flex items-center gap-3 mb-6">
-    <a href="/orgs" class="btn-ghost p-2">
+    <a href="{base}/orgs" class="btn-ghost p-2">
       <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
         <path d="m15 18-6-6 6-6"/>
       </svg>
@@ -107,7 +108,7 @@
     <div class="flex flex-col items-center justify-center py-20 text-center">
       <p class="text-sm font-medium text-neutral-900 dark:text-neutral-100">No contacts at this organisation</p>
       <p class="text-sm text-neutral-400 dark:text-neutral-500 mt-1">It may have been renamed or its contacts removed</p>
-      <a href="/orgs" class="btn-secondary mt-4">All organisations</a>
+      <a href="{base}/orgs" class="btn-secondary mt-4">All organisations</a>
     </div>
   {:else}
     <!-- Engaged employees -->
@@ -131,7 +132,7 @@
         </h2>
         <div class="card divide-y divide-neutral-100 dark:divide-neutral-800">
           {#each contacts as contact (contact.id)}
-            <a href="/contacts/{contact.id}" class="flex items-center gap-3 px-4 py-3 hover:bg-neutral-50 dark:hover:bg-neutral-900 transition-colors group">
+            <a href="{base}/contacts/{contact.id}" class="flex items-center gap-3 px-4 py-3 hover:bg-neutral-50 dark:hover:bg-neutral-900 transition-colors group">
               <Avatar name={contact.name || contact.org || '?'} size="sm" src={photoUrl(contact, '100x100')} />
               <div class="flex-1 min-w-0">
                 <p class="text-sm font-medium text-neutral-900 dark:text-neutral-100 truncate group-hover:text-accent dark:group-hover:text-accent-dark transition-colors">
@@ -169,7 +170,7 @@
                       {getActivityLabel(act.activity_type)}
                       {#if act.expand?.contact}
                         <span class="text-neutral-400 dark:text-neutral-500 font-normal">·</span>
-                        <a href="/contacts/{act.contact}" class="text-accent dark:text-accent-dark font-normal hover:underline">
+                        <a href="{base}/contacts/{act.contact}" class="text-accent dark:text-accent-dark font-normal hover:underline">
                           {act.expand.contact.name || act.expand.contact.org || 'Unknown'}
                         </a>
                       {/if}

@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { base } from '$app/paths';
   import { onMount } from 'svelte';
   import { goto } from '$app/navigation';
   import { pb } from '$lib/pb';
@@ -125,7 +126,7 @@
 
   async function load() {
     if ($currentUser?.role !== 'admin') {
-      goto('/contacts');
+      goto(`${base}/contacts`);
       return;
     }
     loading = true;
@@ -312,7 +313,7 @@
             <div class="flex items-center gap-3 px-3 sm:px-4 py-3">
               <Avatar name={c.name || c.org || '?'} size="sm" />
               <div class="flex-1 min-w-0">
-                <a href="/contacts/{c.id}" class="text-sm font-medium text-neutral-900 dark:text-neutral-100 hover:text-accent dark:hover:text-accent-dark truncate block">
+                <a href="{base}/contacts/{c.id}" class="text-sm font-medium text-neutral-900 dark:text-neutral-100 hover:text-accent dark:hover:text-accent-dark truncate block">
                   {c.name || c.org || 'Unknown'}
                 </a>
                 <p class="text-xs text-neutral-400 dark:text-neutral-500 truncate">
@@ -419,7 +420,7 @@
                       {getActivityLabel(act.activity_type)}
                     </p>
                     {#if act.expand?.contact}
-                      <a href="/contacts/{act.contact}" class="text-xs text-accent dark:text-accent-dark hover:underline truncate block">
+                      <a href="{base}/contacts/{act.contact}" class="text-xs text-accent dark:text-accent-dark hover:underline truncate block">
                         {act.expand.contact.name || act.expand.contact.org || 'Unknown'}
                       </a>
                     {/if}

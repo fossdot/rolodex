@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { base } from '$app/paths';
   import { onMount } from 'svelte';
   import { page } from '$app/stores';
   import { goto } from '$app/navigation';
@@ -78,7 +79,7 @@
       loadLogs();
     } catch {
       toasts.error('Contact not found');
-      goto('/contacts');
+      goto(`${base}/contacts`);
     } finally {
       loading = false;
     }
@@ -137,7 +138,7 @@
         deleted_by: $currentUser?.id,
       });
       toasts.success('Contact deleted');
-      goto('/contacts');
+      goto(`${base}/contacts`);
     } catch {
       toasts.error('Failed to delete contact');
     }
@@ -226,7 +227,7 @@
   <div class="px-6 py-6 max-w-5xl mx-auto">
     <!-- Header -->
     <div class="flex items-center gap-3 mb-6 flex-wrap">
-      <a href="/contacts" class="btn-ghost p-2">
+      <a href="{base}/contacts" class="btn-ghost p-2">
         <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
           <path d="m15 18-6-6 6-6"/>
         </svg>
@@ -245,7 +246,7 @@
           </h1>
           {#if contact.org}
             <p class="text-sm text-neutral-500 dark:text-neutral-400">
-              {contact.designation ? `${contact.designation} · ` : ''}<a href="/orgs/{encodeURIComponent(contact.org)}" class="hover:text-accent dark:hover:text-accent-dark hover:underline transition-colors">{contact.org}</a>
+              {contact.designation ? `${contact.designation} · ` : ''}<a href="{base}/orgs/{encodeURIComponent(contact.org)}" class="hover:text-accent dark:hover:text-accent-dark hover:underline transition-colors">{contact.org}</a>
             </p>
           {:else if contact.designation}
             <p class="text-sm text-neutral-500 dark:text-neutral-400">{contact.designation}</p>
@@ -255,7 +256,7 @@
       {#if canEditContact || canDeleteContact}
         <div class="flex items-center gap-2">
           {#if canEditContact}
-            <a href="/contacts/{id}/edit" class="btn-secondary">
+            <a href="{base}/contacts/{id}/edit" class="btn-secondary">
               <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                 <path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"/>
               </svg>

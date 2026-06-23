@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { base } from '$app/paths';
   import { page } from '$app/stores';
   import { goto } from '$app/navigation';
   import { pb } from '$lib/pb';
@@ -31,7 +32,7 @@
 
   async function logout() {
     pb.authStore.clear();
-    await goto('/login');
+    await goto(`${base}/login`);
     toasts.success('Logged out successfully');
   }
 
@@ -42,9 +43,9 @@
 <aside class="w-56 shrink-0 h-screen sticky top-0 flex flex-col bg-neutral-50 dark:bg-neutral-950 border-r border-neutral-100 dark:border-neutral-800">
   <!-- Logo -->
   <div class="px-5 py-5 border-b border-neutral-100 dark:border-neutral-800">
-    <a href="/contacts" class="flex items-center gap-2">
-      <img src="/logo-black.svg" alt="FOSS United" class="h-6 dark:hidden" />
-      <img src="/logo-white.svg" alt="FOSS United" class="h-6 hidden dark:block" />
+    <a href="{base}/contacts" class="flex items-center gap-2">
+      <img src="{base}/logo-black.svg" alt="FOSS United" class="h-6 dark:hidden" />
+      <img src="{base}/logo-white.svg" alt="FOSS United" class="h-6 hidden dark:block" />
     </a>
     <p class="text-[10px] text-neutral-400 dark:text-neutral-500 mt-1.5 font-medium tracking-widest uppercase">Rolodex</p>
   </div>
@@ -53,9 +54,9 @@
   <nav class="flex-1 px-3 py-4 flex flex-col gap-0.5 overflow-y-auto">
     {#each navItems as item}
       <a
-        href={item.href}
+        href={base + item.href}
         class="flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-all duration-100
-          {currentPath.startsWith(item.href)
+          {currentPath.startsWith(base + item.href)
             ? 'bg-neutral-900 dark:bg-white text-white dark:text-neutral-900'
             : 'text-neutral-600 dark:text-neutral-400 hover:bg-neutral-100 dark:hover:bg-neutral-900 hover:text-neutral-900 dark:hover:text-neutral-100'}"
       >
@@ -66,9 +67,9 @@
 
     {#if isAdmin}
       <a
-        href="/admin"
+        href="{base}/admin"
         class="flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-all duration-100
-          {currentPath.startsWith('/admin')
+          {currentPath.startsWith(base + '/admin')
             ? 'bg-neutral-900 dark:bg-white text-white dark:text-neutral-900'
             : 'text-neutral-600 dark:text-neutral-400 hover:bg-neutral-100 dark:hover:bg-neutral-900 hover:text-neutral-900 dark:hover:text-neutral-100'}"
       >
@@ -83,9 +84,9 @@
   <!-- Footer: import + user + theme -->
   <div class="px-3 py-4 border-t border-neutral-100 dark:border-neutral-800 space-y-2">
     <a
-      href="/contacts/import"
+      href="{base}/contacts/import"
       class="flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-all duration-100
-        {currentPath === '/contacts/import'
+        {currentPath === base + '/contacts/import'
           ? 'bg-neutral-900 dark:bg-white text-white dark:text-neutral-900'
           : 'text-neutral-600 dark:text-neutral-400 hover:bg-neutral-100 dark:hover:bg-neutral-900 hover:text-neutral-900 dark:hover:text-neutral-100'}"
     >

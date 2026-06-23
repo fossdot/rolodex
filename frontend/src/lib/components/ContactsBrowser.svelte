@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { base } from '$app/paths';
   import { onMount } from 'svelte';
   import { pb, photoUrl } from '$lib/pb';
   import { currentUser, toasts } from '$lib/stores';
@@ -116,7 +117,7 @@
         {loading ? '—' : contacts.length} {subtitle}
       </p>
     </div>
-    <a href="/contacts/new" class="btn-primary shrink-0 whitespace-nowrap px-3 py-1.5 text-xs sm:px-4 sm:py-2 sm:text-sm">
+    <a href="{base}/contacts/new" class="btn-primary shrink-0 whitespace-nowrap px-3 py-1.5 text-xs sm:px-4 sm:py-2 sm:text-sm">
       <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
         <path d="M5 12h14M12 5v14"/>
       </svg>
@@ -258,7 +259,7 @@
         {search || activeFilters ? 'Try adjusting your filters' : 'Add your first contact to get started'}
       </p>
       {#if !search && !activeFilters}
-        <a href="/contacts/new" class="btn-primary mt-4">Add Contact</a>
+        <a href="{base}/contacts/new" class="btn-primary mt-4">Add Contact</a>
       {:else}
         <button on:click={clearFilters} class="btn-secondary mt-4">Clear filters</button>
       {/if}
@@ -269,7 +270,7 @@
     <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
       {#each contacts as contact (contact.id)}
         <div class="card p-4 transition-all duration-150 hover:shadow-md hover:border-neutral-200 dark:hover:border-neutral-700">
-          <a href="/contacts/{contact.id}" class="group block">
+          <a href="{base}/contacts/{contact.id}" class="group block">
             <div class="flex items-start gap-3 mb-3">
               <Avatar name={displayName(contact)} src={photoUrl(contact, '100x100')} />
               <div class="flex-1 min-w-0">
@@ -318,7 +319,7 @@
     <div class="card divide-y divide-neutral-100 dark:divide-neutral-800">
       {#each contacts as contact (contact.id)}
         <div class="flex items-center gap-4 px-4 py-3 hover:bg-neutral-50 dark:hover:bg-neutral-900 transition-colors group">
-          <a href="/contacts/{contact.id}" class="flex items-center gap-4 flex-1 min-w-0">
+          <a href="{base}/contacts/{contact.id}" class="flex items-center gap-4 flex-1 min-w-0">
           <Avatar name={displayName(contact)} size="sm" src={photoUrl(contact, '100x100')} />
           <!-- phones: name+org · tablets: +roles · desktop: all four columns -->
           <div class="flex-1 min-w-0 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-1 sm:gap-4 items-center">

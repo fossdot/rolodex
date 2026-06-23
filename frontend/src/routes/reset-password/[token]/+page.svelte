@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { base } from '$app/paths';
   import { page } from '$app/stores';
   import { goto } from '$app/navigation';
   import { pb } from '$lib/pb';
@@ -24,7 +25,7 @@
     try {
       await pb.collection('users').confirmPasswordReset($page.params.token ?? '', password, passwordConfirm);
       toasts.success('Password updated — sign in with your new password.');
-      await goto('/login');
+      await goto(`${base}/login`);
     } catch {
       error = 'This reset link is invalid or has expired. Request a new one from the login page.';
     } finally {
@@ -52,8 +53,8 @@
     <div class="w-full max-w-sm animate-fade-in">
       <!-- Brand -->
       <div class="flex items-center gap-3 mb-8">
-        <img src="/logo-black.svg" alt="FOSS United" class="h-8 dark:hidden" />
-        <img src="/logo-white.svg" alt="FOSS United" class="h-8 hidden dark:block" />
+        <img src="{base}/logo-black.svg" alt="FOSS United" class="h-8 dark:hidden" />
+        <img src="{base}/logo-white.svg" alt="FOSS United" class="h-8 hidden dark:block" />
         <span class="text-sm text-neutral-400 dark:text-neutral-500 font-medium tracking-widest uppercase">Rolodex</span>
       </div>
 
@@ -117,7 +118,7 @@
           {/if}
         </button>
 
-        <a href="/login" class="block text-center text-xs text-neutral-500 dark:text-neutral-400 hover:text-neutral-700 dark:hover:text-neutral-200 py-1">
+        <a href="{base}/login" class="block text-center text-xs text-neutral-500 dark:text-neutral-400 hover:text-neutral-700 dark:hover:text-neutral-200 py-1">
           Back to login
         </a>
       </div>

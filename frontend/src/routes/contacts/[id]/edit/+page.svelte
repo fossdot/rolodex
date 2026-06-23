@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { base } from '$app/paths';
   import { onMount } from 'svelte';
   import { page } from '$app/stores';
   import { goto } from '$app/navigation';
@@ -64,7 +65,7 @@
       };
     } catch {
       toasts.error('Contact not found');
-      goto('/contacts');
+      goto(`${base}/contacts`);
       return;
     } finally {
       loading = false;
@@ -170,7 +171,7 @@
       }
 
       toasts.success('Contact updated');
-      goto(`/contacts/${id}`);
+      goto(`${base}/contacts/${id}`);
     } catch (e: unknown) {
       const msg = (e as { response?: { message?: string } })?.response?.message;
       toasts.error(msg || 'Failed to update contact');
@@ -207,7 +208,7 @@
   <div class="px-6 py-6 max-w-3xl mx-auto">
     <div class="flex items-center justify-between gap-3 mb-6">
       <div class="flex items-center gap-3 min-w-0">
-        <a href="/contacts/{id}" class="btn-ghost p-2 shrink-0">
+        <a href="{base}/contacts/{id}" class="btn-ghost p-2 shrink-0">
           <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
             <path d="m15 18-6-6 6-6"/>
           </svg>
@@ -324,7 +325,7 @@
       </div>
 
       <div class="flex items-center justify-end gap-3 pb-8">
-        <a href="/contacts/{id}" class="btn-secondary">Cancel</a>
+        <a href="{base}/contacts/{id}" class="btn-secondary">Cancel</a>
         <button on:click={save} disabled={saving} class="btn-primary">
           {#if saving}
             <div class="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin"></div>

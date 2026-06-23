@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { base } from '$app/paths';
   import { goto } from '$app/navigation';
   import { pb } from '$lib/pb';
   import { toasts, theme } from '$lib/stores';
@@ -66,7 +67,7 @@
     error = '';
     try {
       await pb.collection('users').authWithOTP(otpId, otpCode.trim(), { mfaId });
-      await goto('/contacts');
+      await goto(`${base}/contacts`);
       toasts.success('Welcome back!');
     } catch {
       error = 'Invalid or expired code. Please try again.';
@@ -138,7 +139,7 @@
     error = '';
     try {
       await pb.collection('users').authWithPassword(email, password);
-      await goto('/contacts');
+      await goto(`${base}/contacts`);
       toasts.success('Welcome back!');
     } catch (e: unknown) {
       const id = getMfaId(e);
@@ -159,7 +160,7 @@
     error = '';
     try {
       await pb.collection('users').authWithOAuth2({ provider: 'google' });
-      await goto('/contacts');
+      await goto(`${base}/contacts`);
       toasts.success('Welcome back!');
     } catch (e: unknown) {
       const id = getMfaId(e);
@@ -212,8 +213,8 @@
     <div class="w-full max-w-sm animate-fade-in">
       <!-- Brand -->
       <div class="flex items-center gap-3 mb-8">
-        <img src="/logo-black.svg" alt="FOSS United" class="h-8 dark:hidden" />
-        <img src="/logo-white.svg" alt="FOSS United" class="h-8 hidden dark:block" />
+        <img src="{base}/logo-black.svg" alt="FOSS United" class="h-8 dark:hidden" />
+        <img src="{base}/logo-white.svg" alt="FOSS United" class="h-8 hidden dark:block" />
         <span class="text-sm text-neutral-400 dark:text-neutral-500 font-medium tracking-widest uppercase">Rolodex</span>
       </div>
 

@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { base } from '$app/paths';
   import { onMount } from 'svelte';
   import { pb } from '$lib/pb';
   import { currentUser, toasts } from '$lib/stores';
@@ -333,7 +334,7 @@
                             </a>
                           {/if}
                           {#if act.expand?.contact}
-                            <a href="/contacts/{act.contact}" class="flex items-center gap-1.5 text-neutral-600 dark:text-neutral-400 hover:text-accent dark:hover:text-accent-dark">
+                            <a href="{base}/contacts/{act.contact}" class="flex items-center gap-1.5 text-neutral-600 dark:text-neutral-400 hover:text-accent dark:hover:text-accent-dark">
                               <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                                 <path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/>
                               </svg>
@@ -367,7 +368,7 @@
         </h2>
         <div class="card divide-y divide-neutral-100 dark:divide-neutral-800">
           {#each activeContacts as entry, i (entry.contact.id)}
-            <a href="/contacts/{entry.contact.id}" class="flex items-center gap-3 px-4 py-3 hover:bg-neutral-50 dark:hover:bg-neutral-900 transition-colors group">
+            <a href="{base}/contacts/{entry.contact.id}" class="flex items-center gap-3 px-4 py-3 hover:bg-neutral-50 dark:hover:bg-neutral-900 transition-colors group">
               <span class="text-sm font-mono font-medium text-neutral-400 dark:text-neutral-500 w-5 text-right shrink-0">
                 {i + 1}
               </span>

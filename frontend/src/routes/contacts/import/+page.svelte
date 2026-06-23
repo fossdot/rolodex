@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { base } from '$app/paths';
   import { goto } from '$app/navigation';
   import { pb } from '$lib/pb';
   import { currentUser, toasts } from '$lib/stores';
@@ -230,7 +231,7 @@
 <div class="px-6 py-6 max-w-3xl mx-auto">
   <!-- Header -->
   <div class="flex items-center gap-3 mb-6">
-    <a href="/contacts" class="btn-ghost p-2" aria-label="Back to contacts">
+    <a href="{base}/contacts" class="btn-ghost p-2" aria-label="Back to contacts">
       <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m15 18-6-6 6-6"/></svg>
     </a>
     <div>
@@ -357,7 +358,7 @@
 
     <!-- Actions -->
     <div class="flex items-center justify-end gap-3 pb-8">
-      <a href="/contacts" class="btn-secondary">{done ? 'Done' : 'Cancel'}</a>
+      <a href="{base}/contacts" class="btn-secondary">{done ? 'Done' : 'Cancel'}</a>
       <button on:click={runImport} disabled={importing || !validRows.length} class="btn-primary">
         {#if importing}
           <div class="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin"></div>

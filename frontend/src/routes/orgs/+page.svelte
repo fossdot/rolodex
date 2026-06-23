@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { base } from '$app/paths';
   import { onMount } from 'svelte';
   import { pb } from '$lib/pb';
   import { toasts } from '$lib/stores';
@@ -153,7 +154,7 @@
     <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
       {#each shown as org (org.name)}
         <a
-          href="/orgs/{encodeURIComponent(org.name)}"
+          href="{base}/orgs/{encodeURIComponent(org.name)}"
           class="card p-4 transition-all duration-150 hover:shadow-md hover:border-neutral-200 dark:hover:border-neutral-700 group"
         >
           <p class="text-sm font-semibold text-neutral-900 dark:text-neutral-100 truncate group-hover:text-accent dark:group-hover:text-accent-dark transition-colors">

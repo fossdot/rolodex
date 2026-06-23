@@ -67,3 +67,6 @@ echo "  2. Open http://localhost:8090/_/ via SSH tunnel to create the superadmin
 echo "     (ssh -L 8090:localhost:8090 root@<this-server-ip>)"
 echo "  3. Run: node $APP_DIR/pocketbase/setup.js <email> <password>"
 echo "  4. Configure SMTP in PocketBase admin → Settings → Mail settings"
+echo "  5. Daily local backups are enabled automatically on first boot (kept 7 days)."
+echo "     For off-host backups that survive disk failure, set S3 credentials in"
+echo "     PocketBase admin → Settings → Backups."

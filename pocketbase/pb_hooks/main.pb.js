@@ -1,27 +1,40 @@
 /// <reference path="../pb_data/types.d.ts" />
 // PocketBase v0.23+ hook API (verified against v0.39).
 
-// Production safety net: keep MFA (email OTP) enabled on the live deployment.
-// MFA on/off lives only in each box's database — locally it is turned off by
-// the gitignored disable_mfa_local migration — so nothing in tracked code
-// guarantees production stays protected. On every boot, if this instance is
-// the production deployment (matched by its configured app URL) and MFA has
-// somehow been turned off, re-enable it and log. Local/dev instances have a
-// different app URL and are left alone, so OTP-free local login still works.
-// Wrapped so a check failure can never prevent the server from starting.
+// Production safety net for settings that live only in each box's database
+// (not in tracked code), so nothing otherwise guarantees production stays
+// protected. On every boot, if this instance is the production deployment
+// (matched by its configured app URL):
+//   1. MFA — re-enable it if it has been turned off (locally it is disabled
+//      by the gitignored disable_mfa_local migration).
+//   2. Backups — enable daily scheduled backups with 7-day retention if none
+//      are configured, so a bad migration / accidental delete / corruption is
+//      recoverable. NOTE: these are written to the same disk; configure S3 in
+//      Settings > Backups for off-host copies that survive disk failure.
+// Local/dev instances have a different app URL and are left alone (OTP-free
+// login and no scheduled backups). Wrapped so a failure can never block boot.
 onBootstrap((e) => {
     e.next();
     try {
         const appURL = String(e.app.settings().meta.appURL || "");
         if (appURL.indexOf("rolodex.fossunited.org") === -1) return; // not production
+
         const users = e.app.findCollectionByNameOrId("_pb_users_auth_");
         if (!users.mfa.enabled) {
             unmarshal({ "mfa": { "enabled": true } }, users);
             e.app.save(users);
             e.app.logger().warn("Re-enabled MFA on the users collection (production safety net).");
         }
+
+        const settings = e.app.settings();
+        if (!settings.backups.cron) {
+            settings.backups.cron = "0 3 * * *"; // daily at 03:00
+            settings.backups.cronMaxKeep = 7;
+            e.app.save(settings);
+            e.app.logger().warn("Enabled daily scheduled backups (production safety net). Set S3 in Settings > Backups for off-host copies.");
+        }
     } catch (err) {
-        e.app.logger().warn("MFA production safety-net check failed: " + err);
+        e.app.logger().warn("Production safety-net check failed: " + err);
     }
 });
 

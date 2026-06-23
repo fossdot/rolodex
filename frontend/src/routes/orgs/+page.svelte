@@ -12,6 +12,7 @@
   let orgs: OrgGroup[] = [];
   let loading = true;
   let search = '';
+  let filterCity = ''; // '' = all cities
 
   onMount(async () => {
     try {
@@ -77,7 +78,10 @@
   }
 
   $: search, runSearch();
-  $: shown = matchKeys === null ? orgs : orgs.filter((o) => matchKeys.has(o.name.toLowerCase()));
+  // All cities across the network, for the filter dropdown.
+  $: allCities = [...new Set(orgs.flatMap((o) => o.cities))].sort((a, b) => a.localeCompare(b));
+  $: shown = (matchKeys === null ? orgs : orgs.filter((o) => matchKeys!.has(o.name.toLowerCase())))
+    .filter((o) => !filterCity || o.cities.includes(filterCity));
 </script>
 
 <svelte:head>
@@ -95,12 +99,23 @@
     </div>
   </div>
 
-  <!-- Search -->
-  <div class="relative flex-1 max-w-md mb-6">
-    <svg class="absolute left-3 top-1/2 -translate-y-1/2 text-neutral-400" xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-      <circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/>
-    </svg>
-    <input type="search" bind:value={search} placeholder="Search org, contact, activity notes…" class="input pl-9" />
+  <!-- Search + filter -->
+  <div class="flex flex-wrap items-center gap-3 mb-6">
+    <div class="relative flex-1 max-w-md">
+      <svg class="absolute left-3 top-1/2 -translate-y-1/2 text-neutral-400" xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/>
+      </svg>
+      <input type="search" bind:value={search} placeholder="Search org, contact, activity notes…" class="input pl-9" />
+    </div>
+    <select bind:value={filterCity} class="input w-auto" title="Filter by city" aria-label="Filter by city">
+      <option value="">All cities</option>
+      {#each allCities as city (city)}
+        <option value={city}>{city}</option>
+      {/each}
+    </select>
+    {#if filterCity}
+      <button on:click={() => (filterCity = '')} class="btn-ghost text-sm">Clear</button>
+    {/if}
   </div>
 
   {#if loading}
@@ -120,10 +135,10 @@
         </svg>
       </div>
       <p class="text-sm font-medium text-neutral-900 dark:text-neutral-100">
-        {search ? 'No organisations match your search' : 'No organisations yet'}
+        {search || filterCity ? 'No organisations match your filters' : 'No organisations yet'}
       </p>
       <p class="text-sm text-neutral-400 dark:text-neutral-500 mt-1">
-        {search ? 'Try a different search term' : 'Organisations appear as contacts are added'}
+        {search || filterCity ? 'Try a different search term or city' : 'Organisations appear as contacts are added'}
       </p>
     </div>
   {:else}

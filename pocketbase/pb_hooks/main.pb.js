@@ -29,6 +29,21 @@ onRecordCreateRequest((e) => {
     e.next();
 }, "users");
 
+// Lock the `role` field on user updates. The users collection has no custom
+// updateRule, so it defaults to "id = @request.auth.id" — i.e. any user can
+// PATCH their own record. `role` is a plain writable field, so without this
+// guard a user could set role:"admin" and self-escalate. Only superusers
+// (the PocketBase admin UI) may change a role; for everyone else we revert
+// it to the stored value regardless of what the client sends.
+onRecordUpdateRequest((e) => {
+    const isSuperuser = e.auth && e.auth.collection().name === "_superusers";
+    if (!isSuperuser) {
+        const original = e.app.findRecordById("users", e.record.id);
+        e.record.set("role", original.get("role"));
+    }
+    e.next();
+}, "users");
+
 // Force added_by = authenticated user, regardless of what the client sends.
 // Prevents attribution fraud and score gaming via the API.
 // Also: when 'other' is picked in fu_roles/topics, the matching free-text

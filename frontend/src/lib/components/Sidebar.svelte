@@ -3,7 +3,7 @@
   import { page } from '$app/stores';
   import { goto } from '$app/navigation';
   import { pb } from '$lib/pb';
-  import { currentUser, theme, toasts } from '$lib/stores';
+  import { currentUser, theme, toasts, shortcutsHelp } from '$lib/stores';
   import Avatar from './Avatar.svelte';
   import ThemeToggle from './ThemeToggle.svelte';
 
@@ -110,6 +110,16 @@
 
     <div class="flex items-center gap-1 px-1">
       <ThemeToggle />
+      <button
+        on:click={shortcutsHelp.open}
+        class="btn-ghost px-2 py-2 rounded-lg text-neutral-500 dark:text-neutral-500 hover:text-neutral-900 dark:hover:text-neutral-100"
+        title="Keyboard shortcuts (?)"
+        aria-label="Keyboard shortcuts"
+      >
+        <svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <rect width="20" height="14" x="2" y="5" rx="2"/><path d="M6 9h.01M10 9h.01M14 9h.01M18 9h.01M7 13h10"/>
+        </svg>
+      </button>
       <button
         on:click={logout}
         class="btn-ghost px-2.5 py-2 rounded-lg flex-1 justify-start text-xs text-neutral-500 dark:text-neutral-500 hover:text-neutral-900 dark:hover:text-neutral-100"

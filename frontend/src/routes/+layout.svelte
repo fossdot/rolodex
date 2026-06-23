@@ -3,9 +3,10 @@
   import { onMount } from 'svelte';
   import { page } from '$app/stores';
   import { goto } from '$app/navigation';
-  import { currentUser, theme } from '$lib/stores';
+  import { currentUser, theme, shortcutsHelp } from '$lib/stores';
   import Sidebar from '$lib/components/Sidebar.svelte';
   import Toasts from '$lib/components/Toasts.svelte';
+  import ShortcutsHelp from '$lib/components/ShortcutsHelp.svelte';
   import '../app.css';
 
   const DEMO = import.meta.env.VITE_DEMO === '1';
@@ -77,6 +78,8 @@
     if (isTyping(e.target) || mod) return; // bare-key shortcuts only when not editing
     if (e.key === '/') {
       if (focusSearch()) e.preventDefault();
+    } else if (e.key === '?') {
+      shortcutsHelp.open();
     } else if (key === 'n') {
       goto(`${base}/contacts/new`);
     }
@@ -143,4 +146,5 @@
   </div>
 {/if}
 
+<ShortcutsHelp />
 <Toasts />

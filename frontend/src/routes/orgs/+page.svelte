@@ -114,7 +114,10 @@
       <svg class="absolute left-3 top-1/2 -translate-y-1/2 text-neutral-400" xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
         <circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/>
       </svg>
-      <input type="search" bind:value={search} placeholder="Search org, contact, activity notes…" class="input pl-9" />
+      <input type="search" bind:value={search} placeholder="Search org, contact, activity notes…" class="input pl-9 pr-8" />
+      {#if !search}
+        <kbd class="hidden sm:block absolute right-2.5 top-1/2 -translate-y-1/2 pointer-events-none px-1.5 py-0.5 rounded border border-neutral-200 dark:border-neutral-700 bg-neutral-50 dark:bg-neutral-800 text-[11px] text-neutral-400 dark:text-neutral-500">/</kbd>
+      {/if}
     </div>
     <select bind:value={filterCity} class="input w-auto" title="Filter by city" aria-label="Filter by city">
       <option value="">All cities</option>

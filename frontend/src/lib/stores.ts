@@ -18,6 +18,13 @@ function createAuthStore() {
 }
 export const currentUser = createAuthStore();
 
+// ── Keyboard-shortcuts help dialog ─────────────────────────────────────────────
+function createShortcutsStore() {
+  const { subscribe, set } = writable(false);
+  return { subscribe, open: () => set(true), close: () => set(false) };
+}
+export const shortcutsHelp = createShortcutsStore();
+
 // ── Theme ─────────────────────────────────────────────────────────────────────
 function createThemeStore() {
   const initial: 'light' | 'dark' =

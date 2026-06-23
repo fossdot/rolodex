@@ -135,8 +135,11 @@
         type="search"
         bind:value={search}
         placeholder="Search name, org, email, city, activity notes…"
-        class="input pl-9"
+        class="input pl-9 pr-8"
       />
+      {#if !search}
+        <kbd class="hidden sm:block absolute right-2.5 top-1/2 -translate-y-1/2 pointer-events-none px-1.5 py-0.5 rounded border border-neutral-200 dark:border-neutral-700 bg-neutral-50 dark:bg-neutral-800 text-[11px] text-neutral-400 dark:text-neutral-500">/</kbd>
+      {/if}
     </div>
 
     <button

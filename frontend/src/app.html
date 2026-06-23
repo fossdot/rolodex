@@ -6,6 +6,31 @@
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <meta name="description" content="FOSS United Rolodex — internal contact relationship manager" />
     <title>Rolodex · FOSS United</title>
+
+    <!-- Internal tool: keep it out of search engines, but render a rich preview
+         when a link is shared in Slack / WhatsApp / iMessage etc. These live in
+         the static shell because link-preview crawlers don't run JavaScript and
+         the app is SSR-disabled. Previews are identical on every route, so no
+         contact data is ever exposed in a shared link. -->
+    <meta name="robots" content="noindex, nofollow" />
+    <meta name="theme-color" content="#278F5E" />
+
+    <meta property="og:type" content="website" />
+    <meta property="og:site_name" content="FOSS United" />
+    <meta property="og:title" content="Rolodex · FOSS United" />
+    <meta property="og:description" content="The shared contact network for the FOSS United team. Sign-in required." />
+    <meta property="og:url" content="https://rolodex.fossunited.org/" />
+    <meta property="og:image" content="https://rolodex.fossunited.org/og-image.png" />
+    <meta property="og:image:type" content="image/png" />
+    <meta property="og:image:width" content="1200" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:image:alt" content="Rolodex — FOSS United's shared contact network" />
+
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content="Rolodex · FOSS United" />
+    <meta name="twitter:description" content="The shared contact network for the FOSS United team. Sign-in required." />
+    <meta name="twitter:image" content="https://rolodex.fossunited.org/og-image.png" />
+
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin="" />
     <link href="https://fonts.googleapis.com/css2?family=Inter:ital,opsz,wght@0,14..32,100..900;1,14..32,100..900&display=swap" rel="stylesheet" />

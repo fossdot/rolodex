@@ -26,7 +26,57 @@
       goto('/contacts');
     }
   }
+
+  // ── Global keyboard shortcuts (only when signed in) ──────────────────────────
+  //   /  or  Cmd/Ctrl+K → focus the page's search box
+  //   n  or  Cmd/Ctrl+N → add a new contact
+  // (Cmd+S is handled on the add/edit forms; we don't hijack Cmd+F — that's the
+  //  browser's find-in-page.)
+  function isTyping(el: EventTarget | null): boolean {
+    const t = el as HTMLElement | null;
+    if (!t) return false;
+    return (
+      t.tagName === 'INPUT' ||
+      t.tagName === 'TEXTAREA' ||
+      t.tagName === 'SELECT' ||
+      t.isContentEditable
+    );
+  }
+
+  function focusSearch(): boolean {
+    const el = document.querySelector<HTMLInputElement>('input[type="search"]');
+    if (el) {
+      el.focus();
+      el.select();
+      return true;
+    }
+    return false;
+  }
+
+  function onKeydown(e: KeyboardEvent) {
+    if (isPublic || !$currentUser) return;
+    const mod = e.metaKey || e.ctrlKey;
+    const key = e.key.toLowerCase();
+
+    if (mod && key === 'k') {
+      if (focusSearch()) e.preventDefault();
+      return;
+    }
+    if (mod && key === 'n') {
+      e.preventDefault(); // best-effort; some browsers reserve Cmd/Ctrl+N
+      goto('/contacts/new');
+      return;
+    }
+    if (isTyping(e.target) || mod) return; // bare-key shortcuts only when not editing
+    if (e.key === '/') {
+      if (focusSearch()) e.preventDefault();
+    } else if (key === 'n') {
+      goto('/contacts/new');
+    }
+  }
 </script>
+
+<svelte:window on:keydown={onKeydown} />
 
 {#if isPublic}
   <slot />

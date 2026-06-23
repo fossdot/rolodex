@@ -178,11 +178,21 @@
       saving = false;
     }
   }
+
+  // Cmd/Ctrl+S saves from anywhere on the form (overrides the browser's save-page).
+  function onKeydown(e: KeyboardEvent) {
+    if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 's') {
+      e.preventDefault();
+      if (!saving && !loading) save();
+    }
+  }
 </script>
 
 <svelte:head>
   <title>Edit Contact · Rolodex</title>
 </svelte:head>
+
+<svelte:window on:keydown={onKeydown} />
 
 {#if loading}
   <div class="px-6 py-6 max-w-3xl mx-auto animate-pulse space-y-4">
@@ -195,16 +205,22 @@
   </div>
 {:else}
   <div class="px-6 py-6 max-w-3xl mx-auto">
-    <div class="flex items-center gap-3 mb-6">
-      <a href="/contacts/{id}" class="btn-ghost p-2">
-        <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-          <path d="m15 18-6-6 6-6"/>
-        </svg>
-      </a>
-      <div>
-        <h1 class="text-xl font-semibold text-neutral-900 dark:text-neutral-50 tracking-tight">Edit Contact</h1>
-        <p class="text-sm text-neutral-500 dark:text-neutral-400 mt-0.5">{name || org || 'Contact'}</p>
+    <div class="flex items-center justify-between gap-3 mb-6">
+      <div class="flex items-center gap-3 min-w-0">
+        <a href="/contacts/{id}" class="btn-ghost p-2 shrink-0">
+          <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="m15 18-6-6 6-6"/>
+          </svg>
+        </a>
+        <div class="min-w-0">
+          <h1 class="text-xl font-semibold text-neutral-900 dark:text-neutral-50 tracking-tight">Edit Contact</h1>
+          <p class="text-sm text-neutral-500 dark:text-neutral-400 mt-0.5 truncate">{name || org || 'Contact'}</p>
+        </div>
       </div>
+      <!-- Top-right save for laptop view; the bottom button stays for narrow screens -->
+      <button on:click={save} disabled={saving} class="btn-primary hidden sm:inline-flex shrink-0">
+        {saving ? 'Saving…' : 'Save Changes'}
+      </button>
     </div>
 
     <div class="space-y-6">

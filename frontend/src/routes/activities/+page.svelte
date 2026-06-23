@@ -15,6 +15,7 @@
 
   let activities: Activity[] = [];
   let loading = true;
+  let loadSeq = 0; // drop a slow response if a newer load started
   let search = '';
 
   // Admin-only: filter activities by the user who logged them
@@ -62,6 +63,7 @@
   }
 
   async function load() {
+    const seq = ++loadSeq;
     loading = true;
     try {
       const filters = ['deleted_at = null'];
@@ -73,17 +75,22 @@
         filters.push(`(event_name ~ '${q}' || notes ~ '${q}' || contact.name ~ '${q}' || contact.org ~ '${q}')`);
       }
 
-      const result = await pb.collection('activities').getList<Activity>(1, 200, {
+      // getFullList pages through every match so the count, the month grouping,
+      // and the active-contacts ranking are computed over the whole window —
+      // getList(1, 200) silently truncated them past 200 activities.
+      const items = await pb.collection('activities').getFullList<Activity>({
         filter: filters.join(' && '),
         sort: '-date,-created',
         expand: 'contact,logged_by',
+        batch: 200,
       });
-      activities = result.items;
+      if (seq !== loadSeq) return; // a newer load superseded this one
+      activities = items;
       loadReactions(activities.map((a) => a.id));
     } catch {
-      toasts.error('Failed to load activities');
+      if (seq === loadSeq) toasts.error('Failed to load activities');
     } finally {
-      loading = false;
+      if (seq === loadSeq) loading = false;
     }
   }
 
@@ -95,10 +102,18 @@
       return;
     }
     try {
-      const all = await pb.collection('reactions').getFullList<Reaction>({
-        filter: activityIds.map((aid) => `activity = '${aid}'`).join(' || '),
-        expand: 'user',
-      });
+      // Chunk the id list so the OR filter string stays a sane length — with
+      // the activity cap removed this could otherwise be thousands of clauses.
+      const CHUNK = 80;
+      const all: Reaction[] = [];
+      for (let i = 0; i < activityIds.length; i += CHUNK) {
+        const batch = activityIds.slice(i, i + CHUNK);
+        const part = await pb.collection('reactions').getFullList<Reaction>({
+          filter: batch.map((aid) => `activity = '${aid}'`).join(' || '),
+          expand: 'user',
+        });
+        all.push(...part);
+      }
       const map: Record<string, Reaction[]> = {};
       for (const r of all) (map[r.activity] ??= []).push(r);
       reactionsByActivity = map;

@@ -16,14 +16,17 @@
 
   onMount(async () => {
     try {
-      const r = await pb.collection('contacts').getList(1, 500, {
+      // getFullList pages through all contacts so org groups and their counts
+      // are complete — getList(1, 500) silently dropped orgs past 500 contacts.
+      const items = await pb.collection('contacts').getFullList({
         filter: "org != '' && deleted_at = null",
         fields: 'id,org,city',
+        batch: 500,
       });
 
       // Group case-insensitively; display the casing used most often.
       const groups = new Map<string, { casings: Map<string, number>; count: number; cities: Set<string> }>();
-      for (const item of r.items) {
+      for (const item of items) {
         const raw = String(item.org).trim();
         if (!raw) continue;
         const key = raw.toLowerCase();
@@ -53,6 +56,7 @@
   // server-side, then we show the org groups that have a matching contact.
   let matchKeys: Set<string> | null = null; // null = no active search
   let debounceTimer: ReturnType<typeof setTimeout>;
+  let searchSeq = 0; // drop a slow search response if a newer one started
 
   async function runSearch() {
     const q = search.trim();
@@ -62,17 +66,21 @@
     }
     clearTimeout(debounceTimer);
     debounceTimer = setTimeout(async () => {
+      const seq = ++searchSeq;
       const esc = q.replace(/\\/g, '\\\\').replace(/'/g, "\\'");
       try {
-        const r = await pb.collection('contacts').getList(1, 500, {
+        // getFullList so an org isn't missed from search results past 500 matches.
+        const items = await pb.collection('contacts').getFullList({
           filter:
             `deleted_at = null && org != '' && ` +
             `(org ~ '${esc}' || name ~ '${esc}' || email ~ '${esc}' || mobile ~ '${esc}' || city ~ '${esc}' || activities_via_contact.notes ?~ '${esc}')`,
           fields: 'org',
+          batch: 500,
         });
-        matchKeys = new Set(r.items.map((i) => String(i.org).trim().toLowerCase()));
+        if (seq !== searchSeq) return; // superseded by a newer search
+        matchKeys = new Set(items.map((i) => String(i.org).trim().toLowerCase()));
       } catch {
-        matchKeys = new Set();
+        if (seq === searchSeq) matchKeys = new Set();
       }
     }, 300);
   }

@@ -14,6 +14,7 @@
 
   let contacts: Contact[] = [];
   let loading = true;
+  let loadSeq = 0; // monotonic guard: drop a slow response if a newer load started
   let search = '';
   let filterRoles: string[] = [];
   let filterTopics: string[] = [];
@@ -22,6 +23,7 @@
   let viewMode: 'grid' | 'list' = 'grid';
 
   async function loadContacts() {
+    const seq = ++loadSeq;
     loading = true;
     try {
       const filters: string[] = ['deleted_at = null'];
@@ -52,16 +54,20 @@
         filters.push(`(${tf})`);
       }
 
-      const result = await pb.collection('contacts').getList<Contact>(1, 200, {
+      // getFullList pages through every match so the list and the count are
+      // complete — getList(1, N) silently dropped contacts past N.
+      const items = await pb.collection('contacts').getFullList<Contact>({
         filter: filters.join(' && ') || '',
         sort: '-created',
         expand: 'added_by',
+        batch: 200,
       });
-      contacts = result.items;
+      if (seq !== loadSeq) return; // a newer load superseded this one
+      contacts = items;
     } catch (e) {
-      toasts.error('Failed to load contacts');
+      if (seq === loadSeq) toasts.error('Failed to load contacts');
     } finally {
-      loading = false;
+      if (seq === loadSeq) loading = false;
     }
   }
 

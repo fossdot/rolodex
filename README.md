@@ -4,6 +4,18 @@ An internal relationship tracker for FOSS United — so the people we know don't
 
 ---
 
+## Is this a CRM?
+
+Not really — and the difference matters.
+
+A CRM is built to manage a sales pipeline: leads, deals, stages, and revenue. It is owned by a sales team, optimised for closing transactions, and the "relationship" is a means to a sale.
+
+Rolodex is the opposite. It is a **shared institutional memory of the people in our community** — speakers, hosts, mentors, sponsors, volunteers. There is no pipeline, no deal stage, no money to close. The goal is not to convert anyone; it is to make sure the organisation never loses track of who it knows and who has shown up for it.
+
+In short: a CRM helps a company sell to customers. Rolodex helps a community remember its people, and recognise the work of those who maintain those relationships.
+
+---
+
 ## Why we built this
 
 FOSS United runs on relationships. Every event we host, every grant we open, every hackathon we run — it works because someone on our team knew the right person and reached out. A speaker for IndiaFOSS. A venue host in Lucknow. A mentor for a student FOSS club. A sponsor who believed in what we do.

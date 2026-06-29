@@ -1,6 +1,5 @@
 <script lang="ts">
   import { base } from '$app/paths';
-  import { goto } from '$app/navigation';
   import { pb } from '$lib/pb';
   import { currentUser, toasts } from '$lib/stores';
   import { FU_ROLES, TOPICS, normalizeCity } from '$lib/constants';
@@ -14,8 +13,50 @@
     'how_you_know', 'fu_roles', 'fu_roles_other', 'topics', 'topics_other',
   ];
 
-  const roleLabel = (v: string) => FU_ROLES.find((r) => r.value === v)?.label ?? v;
-  const topicLabel = (v: string) => TOPICS.find((t) => t.value === v)?.label ?? v;
+  // ── Fuzzy "did you mean?" helper ─────────────────────────────────────────────
+  // Powers suggestions for misspelled headers and role/topic values.
+  function levenshtein(a: string, b: string): number {
+    const m = a.length, n = b.length;
+    if (!m) return n;
+    if (!n) return m;
+    let prevRow = Array.from({ length: n + 1 }, (_, i) => i);
+    for (let i = 1; i <= m; i++) {
+      const row = [i];
+      for (let j = 1; j <= n; j++) {
+        row[j] = a[i - 1] === b[j - 1]
+          ? prevRow[j - 1]
+          : 1 + Math.min(prevRow[j - 1], prevRow[j], row[j - 1]);
+      }
+      prevRow = row;
+    }
+    return prevRow[n];
+  }
+
+  // Closest candidate within a sensible edit distance, else null (no guess).
+  function closest(input: string, candidates: string[]): string | null {
+    const lc = input.toLowerCase();
+    let best: string | null = null;
+    let bestD = Infinity;
+    for (const c of candidates) {
+      const d = levenshtein(lc, c.toLowerCase());
+      if (d < bestD) { bestD = d; best = c; }
+    }
+    return best && bestD <= Math.max(2, Math.ceil(best.length * 0.4)) ? best : null;
+  }
+
+  // Suggest the closest role/topic label for an unknown token (matches label or code).
+  function suggestOption(input: string, options: { value: string; label: string }[]): string | null {
+    const lc = input.toLowerCase();
+    let best: string | null = null;
+    let bestD = Infinity;
+    for (const o of options) {
+      for (const cand of [o.label, o.value]) {
+        const d = levenshtein(lc, cand.toLowerCase());
+        if (d < bestD) { bestD = d; best = o.label; }
+      }
+    }
+    return best && bestD <= Math.max(2, Math.ceil(best.length * 0.4)) ? best : null;
+  }
 
   // Match a single token against an option list by slug OR label (case-insensitive).
   function mapTokens(raw: string, options: { value: string; label: string }[]) {
@@ -34,64 +75,69 @@
     return { values, unknown };
   }
 
-  // ── Template download (≤3 of the user's OWN contacts as samples) ────────────
-  let downloading = false;
-  async function downloadTemplate() {
-    downloading = true;
-    try {
-      let rows: string[][] = [];
-      try {
-        const r = await pb.collection('contacts').getList(1, 3, {
-          filter: `added_by = '${$currentUser?.id}' && deleted_at = null`,
-          sort: '-created',
-        });
-        rows = r.items.map((c) => [
-          c.name ?? '', c.org ?? '', c.designation ?? '', c.city ?? '', c.country ?? '',
-          c.email ?? '', c.mobile ?? '', c.secondary_email ?? '', c.secondary_mobile ?? '', c.linkedin ?? '',
-          c.how_you_know ?? '',
-          (c.fu_roles ?? []).map(roleLabel).join(' | '), c.fu_roles_other ?? '',
-          (c.topics ?? []).map(topicLabel).join(' | '), c.topics_other ?? '',
-        ]);
-      } catch {
-        /* fall through to synthetic examples */
-      }
+  // ── Template download ────────────────────────────────────────────────────────
+  // Three curated example rows that demonstrate every formatting rule: a fully
+  // filled contact with pipe-separated multi-values, a minimal required-only
+  // contact, and one that uses "Other" with the matching *_other columns.
+  function downloadTemplate() {
+    // Fictional sample rows — Rolodex never exports real contacts. Between them
+    // these rows use every allowed role and topic, several countries/cities, the
+    // optional columns left blank or filled, pipe-separated multi-values, and the
+    // "Other" + matching *_other pattern. Employees overwrite them with real data.
+    const examples: string[][] = [
+      ['Ananya Sharma', 'Red Hat', 'Principal Engineer', 'Bangalore', 'India',
+        'ananya@example.com', '+91 98765 43210', '', '', 'https://linkedin.com/in/ananya',
+        'Met at IndiaFOSS 2024', 'Speaker | Mentor', '', 'Technologist | Open Source | DevOps / Infrastructure', ''],
+      ['', 'Postman', 'Developer Advocate', 'Delhi', 'India',
+        '', '+91 91234 56780', '', '', '',
+        'Connected at a Delhi meetup', 'Meetup Host', '', 'Community Building', ''],
+      ['Rahul Verma', 'Zerodha', 'Engineering Manager', 'Mumbai', 'India',
+        'rahul@example.com', '', '', '', 'https://linkedin.com/in/rahulverma',
+        'Sponsored our annual conference', 'Sponsor', '', 'Finance / Funding | Open Source', ''],
+      ['Meera Iyer', 'NIT Tiruchirappalli', 'Student', 'Tiruchirappalli', 'India',
+        'meera@example.com', '+91 90000 11111', '', '', '',
+        'Runs the campus FOSS club', 'FOSS Club Ambassador (Student)', '', 'Education | AI / ML', ''],
+      ['Daniel Brooks', 'HashiCorp', 'Open Source Lead', 'San Francisco', 'United States',
+        'daniel@example.com', '+1 415 555 0142', '', '', 'https://linkedin.com/in/danielbrooks',
+        'Maintains a project we rely on', 'Project Maintainer | Mentor', '', 'Open Source | Security', ''],
+      ['Lakshmi Rao', '', 'Policy Researcher', 'Delhi NCR', 'India',
+        'lakshmi@example.com', '', 'lakshmi.alt@example.com', '', '',
+        'Advises our public-policy work', 'Governing Board (Expert)', '', 'Public Policy | Legal / Policy', ''],
+      ['Yuki Tanaka', 'Mercari', 'Hardware Engineer', 'Singapore', 'Singapore',
+        'yuki@example.com', '', '', '', '',
+        'Met at a hardware meetup', 'Organising Volunteer | General', '', 'Hardware | AV Enthusiast | Design', ''],
+      ['Arjun Nair', 'Indian Institute of Science', 'Professor', 'Bangalore', 'India',
+        'arjun@example.com', '+91 98800 22222', '', '', '',
+        'Coordinates the campus FOSS club', 'FOSS Club Ambassador (Staff)', '', 'Government | Research / Academia', ''],
+      ['Sofia Muller', 'Grafana Labs', 'Developer Advocate', 'Berlin', 'Germany',
+        'sofia@example.com', '+49 151 2345 6789', '', '', 'https://linkedin.com/in/sofiamueller',
+        'Spoke on an unusual track', 'Other', 'Documentation Lead', 'AI / ML | Other', 'Open Hardware Policy'],
+    ];
 
-      // No own contacts yet → ship illustrative examples instead.
-      if (rows.length === 0) {
-        rows = [
-          ['Ananya Sharma', 'Red Hat', 'Principal Engineer', 'Bangalore', 'India',
-            'ananya@example.com', '+91 98765 43210', '', '', 'https://linkedin.com/in/ananya',
-            'Met at IndiaFOSS 2024', 'Speaker | Mentor', '', 'Open Source | DevOps / Infrastructure', ''],
-          ['Rahul Verma', 'Postman', 'Developer Advocate', 'Delhi', 'India',
-            '', '+91 91234 56780', '', '', '',
-            'Connected at a Delhi meetup', 'Meetup Host', '', 'Community Building', ''],
-        ];
-      }
-
-      const csv = toCsv(COLUMNS, rows);
-      const blob = new Blob([csv], { type: 'text/csv;charset=utf-8' });
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = 'rolodex-contacts-template.csv';
-      a.click();
-      URL.revokeObjectURL(url);
-    } finally {
-      downloading = false;
-    }
+    const csv = toCsv(COLUMNS, examples);
+    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'rolodex-contacts-template.csv';
+    a.click();
+    URL.revokeObjectURL(url);
   }
 
   // ── File parsing + validation ───────────────────────────────────────────────
+  type RowError = { message: string; fix: string };
   type ParsedRow = {
     line: number;
     payload: Record<string, unknown>;
     display: { name: string; org: string; contact: string };
-    errors: string[];
+    errors: RowError[];
   };
 
   let fileName = '';
   let parsed: ParsedRow[] = [];
   let parseError = '';
+  // Headers in the file that don't match any contact field (data is ignored).
+  let unknownHeaders: { header: string; suggestion: string | null }[] = [];
   let dragging = false;
 
   $: validRows = parsed.filter((r) => r.errors.length === 0);
@@ -99,8 +145,20 @@
 
   const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
+  // Build the "fix" hint for an unrecognised role/topic token list.
+  function unknownFix(bad: string[], options: { value: string; label: string }[], otherCol: string): string {
+    const guesses = bad
+      .map((b) => {
+        const s = suggestOption(b, options);
+        return s ? `“${b}” → did you mean “${s}”?` : null;
+      })
+      .filter(Boolean);
+    if (guesses.length) return `${guesses.join(' ')} Or use “Other” and fill the ${otherCol} column.`;
+    return `Use one of the allowed values listed below, or “Other” with the ${otherCol} column filled.`;
+  }
+
   function validateRow(o: Record<string, string>, line: number): ParsedRow {
-    const errors: string[] = [];
+    const errors: RowError[] = [];
     const name = (o.name ?? '').trim();
     const org = (o.org ?? '').trim();
     const email = (o.email ?? '').trim();
@@ -108,24 +166,35 @@
     const mobile = (o.mobile ?? '').trim();
     const how_you_know = (o.how_you_know ?? '').trim();
 
-    if (!name && !org) errors.push('Name or Organisation is required');
-    if (!email && !mobile) errors.push('Email or Mobile is required');
-    if (email && !EMAIL_RE.test(email)) errors.push('Invalid email');
-    if (secondary_email && !EMAIL_RE.test(secondary_email)) errors.push('Invalid secondary email');
-    if (!how_you_know) errors.push('"how_you_know" is required');
+    if (!name && !org)
+      errors.push({ message: 'Missing name and organisation', fix: 'Fill the “name” or the “org” column (at least one).' });
+    if (!email && !mobile)
+      errors.push({ message: 'Missing email and mobile', fix: 'Fill the “email” or the “mobile” column (at least one).' });
+    if (email && !EMAIL_RE.test(email))
+      errors.push({ message: `Invalid email “${email}”`, fix: 'Use a full address like name@example.com, or leave it blank.' });
+    if (secondary_email && !EMAIL_RE.test(secondary_email))
+      errors.push({ message: `Invalid secondary email “${secondary_email}”`, fix: 'Use a full address like name@example.com, or leave it blank.' });
+    if (!how_you_know)
+      errors.push({ message: 'Missing “how_you_know”', fix: 'Add a short note on how you know this person, e.g. “Met at IndiaFOSS 2024”.' });
 
     const { values: fu_roles, unknown: badRoles } = mapTokens(o.fu_roles ?? '', FU_ROLES);
-    if (badRoles.length) errors.push(`Unknown role(s): ${badRoles.join(', ')}`);
-    if (!fu_roles.length) errors.push('At least one fu_roles value is required');
+    if (badRoles.length)
+      errors.push({ message: `Unrecognised role${badRoles.length > 1 ? 's' : ''}: ${badRoles.join(', ')}`, fix: unknownFix(badRoles, FU_ROLES, 'fu_roles_other') });
+    if (!fu_roles.length)
+      errors.push({ message: 'No role in “fu_roles”', fix: 'Add at least one role, e.g. “Speaker”. Separate multiple with a pipe: “Speaker | Mentor”.' });
 
     const { values: topics, unknown: badTopics } = mapTokens(o.topics ?? '', TOPICS);
-    if (badTopics.length) errors.push(`Unknown topic(s): ${badTopics.join(', ')}`);
-    if (!topics.length) errors.push('At least one topics value is required');
+    if (badTopics.length)
+      errors.push({ message: `Unrecognised topic${badTopics.length > 1 ? 's' : ''}: ${badTopics.join(', ')}`, fix: unknownFix(badTopics, TOPICS, 'topics_other') });
+    if (!topics.length)
+      errors.push({ message: 'No topic in “topics”', fix: 'Add at least one topic, e.g. “Open Source”. Separate multiple with a pipe: “Open Source | Security”.' });
 
     const fu_roles_other = (o.fu_roles_other ?? '').trim();
     const topics_other = (o.topics_other ?? '').trim();
-    if (fu_roles.includes('other') && !fu_roles_other) errors.push('fu_roles_other is required when "other" is used');
-    if (topics.includes('other') && !topics_other) errors.push('topics_other is required when "other" is used');
+    if (fu_roles.includes('other') && !fu_roles_other)
+      errors.push({ message: '“Other” role needs a description', fix: 'Fill the “fu_roles_other” column with the custom role name.' });
+    if (topics.includes('other') && !topics_other)
+      errors.push({ message: '“Other” topic needs a description', fix: 'Fill the “topics_other” column with the custom topic name.' });
 
     return {
       line,
@@ -156,23 +225,29 @@
     fileName = file.name;
     parsed = [];
     parseError = '';
+    unknownHeaders = [];
     try {
       const text = await file.text();
       const objects = parseCsvObjects(text);
       if (objects.length === 0) {
-        parseError = 'The file has no data rows.';
+        parseError = 'This file has a header row but no contacts below it. Add at least one row, then re-upload.';
         return;
       }
       const known = new Set(COLUMNS);
-      const hasKnownHeader = Object.keys(objects[0]).some((h) => known.has(h));
+      const headers = Object.keys(objects[0]).filter(Boolean);
+      const hasKnownHeader = headers.some((h) => known.has(h));
       if (!hasKnownHeader) {
-        parseError = 'No recognised columns found. Download the template to see the expected header row.';
+        parseError = `The first row must be a header. None of its columns matched — expected names like ${COLUMNS.slice(0, 5).join(', ')}, … . Download the template for the exact header row.`;
         return;
       }
+      // Surface columns we'll ignore so silently-dropped data is visible.
+      unknownHeaders = headers
+        .filter((h) => !known.has(h))
+        .map((h) => ({ header: h, suggestion: closest(h, COLUMNS) }));
       // +2: row 1 is the header, and arrays are 0-indexed.
       parsed = objects.map((o, i) => validateRow(o, i + 2));
     } catch {
-      parseError = 'Could not read that file. Make sure it is a valid .csv.';
+      parseError = 'Could not read that file. Make sure it is a valid .csv exported with UTF-8 encoding.';
     }
   }
 
@@ -188,7 +263,7 @@
   // ── Import ────────────────────────────────────────────────────────────────
   let importing = false;
   let importedCount = 0;
-  let failures: { line: number; message: string }[] = [];
+  let failures: { line: number; name: string; message: string }[] = [];
   let done = false;
 
   function resetResults() {
@@ -207,7 +282,11 @@
         importedCount += 1;
       } catch (e: unknown) {
         const msg = (e as { response?: { message?: string } })?.response?.message;
-        failures = [...failures, { line: row.line, message: msg || 'Server rejected this row' }];
+        failures = [...failures, {
+          line: row.line,
+          name: row.display.name || row.display.org || `Row #${row.line}`,
+          message: msg || 'The server rejected this row. Check the values and try again.',
+        }];
       }
     }
     importing = false;
@@ -220,6 +299,7 @@
     fileName = '';
     parsed = [];
     parseError = '';
+    unknownHeaders = [];
     resetResults();
   }
 </script>
@@ -246,13 +326,10 @@
       <div class="flex items-start justify-between gap-4">
         <div>
           <h2 class="text-sm font-semibold text-neutral-900 dark:text-neutral-100">1. Download the template</h2>
-          <p class="text-sm text-neutral-500 dark:text-neutral-400 mt-1">
-            Includes the required header row and up to three of your existing contacts as a guide.
-          </p>
         </div>
-        <button on:click={downloadTemplate} disabled={downloading} class="btn-secondary shrink-0 gap-2">
+        <button on:click={downloadTemplate} class="btn-secondary shrink-0 gap-2">
           <svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" x2="12" y1="15" y2="3"/></svg>
-          {downloading ? 'Preparing…' : 'Download template'}
+          Download template
         </button>
       </div>
       <div class="text-xs text-neutral-500 dark:text-neutral-400 space-y-1 border-t border-neutral-100 dark:border-neutral-800 pt-3">
@@ -307,7 +384,24 @@
       {/if}
 
       {#if parseError}
-        <p class="text-sm text-red-600 dark:text-red-400">{parseError}</p>
+        <div class="flex items-start gap-2.5 rounded-lg border border-red-200 dark:border-red-900 bg-red-50/70 dark:bg-red-950/40 px-4 py-3">
+          <svg class="text-red-500 shrink-0 mt-0.5" xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" x2="12" y1="8" y2="12"/><line x1="12" x2="12.01" y1="16" y2="16"/></svg>
+          <p class="text-sm text-red-700 dark:text-red-300">{parseError}</p>
+        </div>
+      {/if}
+
+      {#if unknownHeaders.length}
+        <div class="flex items-start gap-2.5 rounded-lg border border-amber-200 dark:border-amber-900 bg-amber-50/70 dark:bg-amber-950/40 px-4 py-3">
+          <svg class="text-amber-500 shrink-0 mt-0.5" xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z"/><line x1="12" x2="12" y1="9" y2="13"/><line x1="12" x2="12.01" y1="17" y2="17"/></svg>
+          <div class="text-xs text-amber-700 dark:text-amber-300 space-y-1">
+            <p class="font-medium">These columns aren't recognised and will be ignored:</p>
+            <ul class="space-y-0.5">
+              {#each unknownHeaders as h}
+                <li><code class="text-amber-800 dark:text-amber-200">{h.header}</code>{#if h.suggestion} — rename it to <code class="text-amber-800 dark:text-amber-200">{h.suggestion}</code>?{/if}</li>
+              {/each}
+            </ul>
+          </div>
+        </div>
       {/if}
 
       {#if parsed.length}
@@ -317,7 +411,7 @@
         </div>
 
         <!-- Preview -->
-        <div class="max-h-80 overflow-auto rounded-lg border border-neutral-100 dark:border-neutral-800 divide-y divide-neutral-100 dark:divide-neutral-800">
+        <div class="max-h-96 overflow-auto rounded-lg border border-neutral-100 dark:border-neutral-800 divide-y divide-neutral-100 dark:divide-neutral-800">
           {#each parsed as row (row.line)}
             <div class="px-3 py-2 text-sm flex items-start gap-2 {row.errors.length ? 'bg-red-50/60 dark:bg-red-950/30' : ''}">
               <span class="text-[11px] text-neutral-400 w-8 shrink-0 pt-0.5">#{row.line}</span>
@@ -327,7 +421,14 @@
                   {#if row.display.org && row.display.name}<span class="text-neutral-400"> · {row.display.org}</span>{/if}
                 </p>
                 {#if row.errors.length}
-                  <p class="text-xs text-red-600 dark:text-red-400 mt-0.5">{row.errors.join(' · ')}</p>
+                  <ul class="mt-1 space-y-1">
+                    {#each row.errors as err}
+                      <li class="text-xs leading-snug">
+                        <span class="font-medium text-red-600 dark:text-red-400">{err.message}.</span>
+                        <span class="text-neutral-500 dark:text-neutral-400">{err.fix}</span>
+                      </li>
+                    {/each}
+                  </ul>
                 {:else}
                   <p class="text-xs text-neutral-400 truncate">{row.display.contact}</p>
                 {/if}
@@ -337,7 +438,7 @@
         </div>
 
         {#if invalidRows.length}
-          <p class="text-xs text-neutral-500 dark:text-neutral-400">Rows with errors are skipped. Fix them in your file and re-upload to include them.</p>
+          <p class="text-xs text-neutral-500 dark:text-neutral-400">Rows with errors are skipped. Fix them in your file using the hints above, then re-upload to include them.</p>
         {/if}
       {/if}
     </div>
@@ -349,8 +450,11 @@
           Imported {importedCount} of {validRows.length} contact{validRows.length === 1 ? '' : 's'}.
         </p>
         {#if failures.length}
-          <div class="text-xs text-red-600 dark:text-red-400 space-y-0.5">
-            {#each failures as f}<p>Row #{f.line}: {f.message}</p>{/each}
+          <div class="text-xs space-y-1 border-t border-neutral-100 dark:border-neutral-800 pt-2">
+            <p class="text-neutral-500 dark:text-neutral-400">These rows were rejected by the server and not saved:</p>
+            {#each failures as f}
+              <p><span class="font-medium text-neutral-700 dark:text-neutral-300">{f.name}</span> <span class="text-neutral-400">(row #{f.line})</span> — <span class="text-red-600 dark:text-red-400">{f.message}</span></p>
+            {/each}
           </div>
         {/if}
       </div>

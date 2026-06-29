@@ -5,9 +5,11 @@
   import { goto } from '$app/navigation';
   import { pb, photoUrl } from '$lib/pb';
   import { currentUser, toasts } from '$lib/stores';
-  import type { Contact, Activity, Reaction, User, ContactLog } from '$lib/types';
+  import type { Contact, Activity, Reaction, User, ContactLog, Reminder } from '$lib/types';
   import { FU_ROLES, TOPICS, ACTIVITY_TYPES } from '$lib/constants';
+  import { istToUtc, utcToIstParts, DEFAULT_REMINDER_TIME } from '$lib/reminder';
   import Avatar from '$lib/components/Avatar.svelte';
+  import ReminderFields from '$lib/components/ReminderFields.svelte';
   import Lightbox from '$lib/components/Lightbox.svelte';
   import Reactions from '$lib/components/Reactions.svelte';
   import RichText from '$lib/components/RichText.svelte';
@@ -32,6 +34,105 @@
 
   let reactionsByActivity: Record<string, Reaction[]> = {};
   let logs: ContactLog[] = [];
+
+  // ── Reminders — follow-ups attached to an activity ─────────────────────────
+  const todayStr = new Date().toISOString().split('T')[0];
+  let users: User[] = [];
+  let remindersByActivity: Record<string, Reminder[]> = {};
+
+  // Inline per-activity reminder editor
+  let editingReminderFor: string | null = null; // activity id being edited
+  let remEditingId: string | null = null;        // existing reminder id, or null = new
+  let remDate = '';
+  let remTime = DEFAULT_REMINDER_TIME;
+  let remTo = '';
+  let remSaving = false;
+
+  // Log-activity form: optional follow-up reminder
+  let actRemind = false;
+  let actRemindDate = '';
+  let actRemindTime = DEFAULT_REMINDER_TIME;
+  let actRemindTo = '';
+
+  // The notify roster is only needed when a reminder form opens — fetch on demand.
+  async function ensureUsers() {
+    if (users.length) return;
+    try {
+      users = await pb.collection('users').getFullList<User>({ sort: 'name' });
+    } catch {
+      /* non-fatal — picker just shows nothing */
+    }
+  }
+
+  // Only the current user's reminders come back (access rules scope them), so
+  // every chip we render is personal.
+  async function loadReminders() {
+    try {
+      const all = await pb.collection('reminders').getFullList<Reminder>({
+        filter: `contact = '${id}'`,
+        sort: 'remind_at',
+        expand: 'notify',
+      });
+      const map: Record<string, Reminder[]> = {};
+      for (const r of all) (map[r.activity] ??= []).push(r);
+      remindersByActivity = map;
+    } catch {
+      remindersByActivity = {};
+    }
+  }
+
+  async function openReminderEditor(activityId: string, existing?: Reminder) {
+    await ensureUsers();
+    remEditingId = existing?.id ?? null;
+    const parts = utcToIstParts(existing?.remind_at);
+    remDate = parts.date || todayStr;
+    remTime = parts.time;
+    remTo = existing?.notify || $currentUser?.id || '';
+    editingReminderFor = activityId;
+  }
+
+  async function saveActivityReminder() {
+    if (!editingReminderFor || !remDate) return;
+    remSaving = true;
+    try {
+      const payload = {
+        contact: id,
+        activity: editingReminderFor,
+        remind_at: istToUtc(remDate, remTime),
+        notify: remTo || $currentUser?.id,
+        created_by: $currentUser?.id, // also forced server-side
+      };
+      if (remEditingId) await pb.collection('reminders').update(remEditingId, payload);
+      else await pb.collection('reminders').create(payload);
+      await loadReminders();
+      editingReminderFor = null;
+      toasts.success('Reminder saved');
+    } catch {
+      toasts.error('Failed to save reminder');
+    } finally {
+      remSaving = false;
+    }
+  }
+
+  async function deleteReminder(rem: Reminder) {
+    try {
+      await pb.collection('reminders').delete(rem.id);
+      await loadReminders();
+      toasts.success('Reminder removed');
+    } catch {
+      toasts.error('Failed to remove reminder');
+    }
+  }
+
+  // Optional follow-up reminder shown inside the Log Activity form.
+  async function toggleActReminder() {
+    actRemind = !actRemind;
+    if (actRemind) {
+      await ensureUsers();
+      if (!actRemindDate) actRemindDate = todayStr;
+      if (!actRemindTo) actRemindTo = $currentUser?.id || '';
+    }
+  }
 
   async function loadLogs() {
     try {
@@ -77,6 +178,7 @@
       ]);
       loadReactions(activities.map((a) => a.id));
       loadLogs();
+      loadReminders();
     } catch {
       toasts.error('Contact not found');
       goto(`${base}/contacts`);
@@ -116,12 +218,32 @@
       });
       const expanded = await pb.collection('activities').getOne<Activity>(newAct.id, { expand: 'logged_by' });
       activities = [expanded, ...activities];
+
+      // Optional follow-up reminder, born with the activity.
+      if (actRemind && actRemindDate) {
+        try {
+          await pb.collection('reminders').create({
+            contact: id,
+            activity: newAct.id,
+            remind_at: istToUtc(actRemindDate, actRemindTime),
+            notify: actRemindTo || $currentUser?.id,
+            created_by: $currentUser?.id,
+          });
+          await loadReminders();
+        } catch {
+          toasts.error('Activity saved, but the reminder could not be set');
+        }
+      }
+
       showActivityForm = false;
       actType = '';
       actEvent = '';
       actLink = '';
       actDate = new Date().toISOString().split('T')[0];
       actNotes = '';
+      actRemind = false;
+      actRemindDate = '';
+      actRemindTime = DEFAULT_REMINDER_TIME;
       toasts.success('Activity logged');
     } catch {
       toasts.error('Failed to log activity');
@@ -484,6 +606,31 @@
                 {#if actErrors.notes}<p class="text-xs text-red-500 mt-1">{actErrors.notes}</p>{/if}
               </div>
             </div>
+
+            <!-- Optional follow-up reminder, linked to this activity -->
+            <div class="border-t border-neutral-100 dark:border-neutral-800 pt-3">
+              {#if !actRemind}
+                <button type="button" on:click={toggleActReminder} class="inline-flex items-center gap-1.5 text-xs font-medium text-neutral-600 dark:text-neutral-300 hover:text-accent dark:hover:text-accent-dark transition-colors">
+                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9"/><path d="M10.3 21a1.94 1.94 0 0 0 3.4 0"/></svg>
+                  Add a follow-up reminder
+                </button>
+              {:else}
+                <div class="rounded-lg bg-neutral-50 dark:bg-neutral-900 p-3 space-y-3 animate-fade-in">
+                  <div class="flex items-center justify-between gap-2">
+                    <p class="text-xs font-medium text-neutral-700 dark:text-neutral-300 flex items-center gap-1.5">
+                      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9"/><path d="M10.3 21a1.94 1.94 0 0 0 3.4 0"/></svg>
+                      Follow-up reminder
+                    </p>
+                    <button type="button" on:click={() => (actRemind = false)} class="btn-ghost p-1 text-neutral-400 hover:text-neutral-700 dark:hover:text-neutral-200" title="Remove reminder">
+                      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18M6 6l12 12"/></svg>
+                    </button>
+                  </div>
+                  <p class="text-[11px] text-neutral-500 dark:text-neutral-400 -mt-1.5">You'll be emailed at the chosen IST time; this activity's context is included. Defaults to 10 AM.</p>
+                  <ReminderFields bind:date={actRemindDate} bind:time={actRemindTime} bind:notify={actRemindTo} {users} currentUserId={$currentUser?.id ?? ''} minDate={todayStr} idPrefix="act-rem" />
+                </div>
+              {/if}
+            </div>
+
             <div class="flex justify-end gap-2">
               <button on:click={() => (showActivityForm = false)} class="btn-secondary text-sm py-1.5">Cancel</button>
               <button on:click={saveActivity} disabled={actSaving} class="btn-primary text-sm py-1.5">
@@ -512,6 +659,9 @@
         {:else}
           <div class="space-y-2">
             {#each shownActivities as activity (activity.id)}
+              {@const rems = remindersByActivity[activity.id] ?? []}
+              {@const pendingRem = rems.find((r) => !r.sent_at)}
+              {@const sentRems = rems.filter((r) => r.sent_at)}
               <div class="card px-4 py-3.5 flex items-start gap-3 group animate-fade-in {activity.deleted_at ? 'opacity-50' : ''}">
                 <div class="w-1.5 h-1.5 rounded-full {activity.deleted_at ? 'bg-red-400' : 'bg-accent dark:bg-accent-dark'} mt-2 shrink-0"></div>
                 <div class="flex-1 min-w-0">
@@ -542,6 +692,53 @@
                     <div class="mt-2">
                       <Reactions activityId={activity.id} reactions={reactionsByActivity[activity.id] ?? []} />
                     </div>
+
+                    <!-- Reminder history (fired) -->
+                    {#each sentRems as sr (sr.id)}
+                      <p class="text-[11px] text-neutral-400 dark:text-neutral-500 mt-1.5 flex items-center gap-1">
+                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>
+                        Reminded {formatIST(sr.remind_at)} IST
+                      </p>
+                    {/each}
+
+                    <!-- Reminder: inline editor / pending chip / add affordance (personal) -->
+                    {#if editingReminderFor === activity.id}
+                      <div class="mt-2 rounded-lg border border-accent/40 dark:border-accent-dark/40 p-3 space-y-3 animate-fade-in">
+                        <p class="text-xs font-medium text-neutral-700 dark:text-neutral-300 flex items-center gap-1.5">
+                          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9"/><path d="M10.3 21a1.94 1.94 0 0 0 3.4 0"/></svg>
+                          {remEditingId ? 'Edit reminder' : 'Follow-up reminder'}
+                        </p>
+                        <p class="text-[11px] text-neutral-500 dark:text-neutral-400 -mt-1.5">Linked to this activity — its context is included in the email. Defaults to 10 AM IST.</p>
+                        <ReminderFields bind:date={remDate} bind:time={remTime} bind:notify={remTo} {users} currentUserId={$currentUser?.id ?? ''} minDate={todayStr} idPrefix={`rem-${activity.id}`} />
+                        <div class="flex items-center gap-2 pt-0.5">
+                          <button on:click={saveActivityReminder} disabled={remSaving || !remDate} class="btn-primary text-xs py-1.5">Save</button>
+                          <button on:click={() => (editingReminderFor = null)} class="btn-secondary text-xs py-1.5">Cancel</button>
+                        </div>
+                      </div>
+                    {:else if pendingRem}
+                      <div class="mt-2 flex items-center flex-wrap gap-x-2 gap-y-1">
+                        <span class="inline-flex items-center gap-1.5 px-2 py-1 rounded-full text-[11px] font-medium bg-accent/10 dark:bg-accent-dark/15 text-accent dark:text-accent-dark">
+                          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9"/><path d="M10.3 21a1.94 1.94 0 0 0 3.4 0"/></svg>
+                          Follow up {formatIST(pendingRem.remind_at)} IST
+                        </span>
+                        {#if pendingRem.notify !== $currentUser?.id}
+                          <span class="text-[11px] text-neutral-400 dark:text-neutral-500">notifies {pendingRem.expand?.notify?.name || pendingRem.expand?.notify?.email}</span>
+                        {/if}
+                        {#if pendingRem.created_by === $currentUser?.id && canLogActivity}
+                          <button on:click={() => openReminderEditor(activity.id, pendingRem)} class="btn-ghost p-1 text-neutral-400 hover:text-accent dark:hover:text-accent-dark" title="Edit reminder">
+                            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"/></svg>
+                          </button>
+                          <button on:click={() => deleteReminder(pendingRem)} class="btn-ghost p-1 text-neutral-400 hover:text-red-500" title="Remove reminder">
+                            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/></svg>
+                          </button>
+                        {/if}
+                      </div>
+                    {:else if canLogActivity}
+                      <button on:click={() => openReminderEditor(activity.id)} class="mt-2 inline-flex items-center gap-1.5 text-[11px] font-medium text-neutral-500 dark:text-neutral-400 hover:text-accent dark:hover:text-accent-dark transition-colors">
+                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9"/><path d="M10.3 21a1.94 1.94 0 0 0 3.4 0"/></svg>
+                        Add follow-up reminder
+                      </button>
+                    {/if}
                   {/if}
                 </div>
               </div>

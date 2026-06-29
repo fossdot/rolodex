@@ -74,11 +74,12 @@ async function main() {
       console.log('⏭  users collection already has name + role fields');
     }
 
-    // Restrict user listing to admins; individual record view stays open for expands.
+    // Any signed-in user may list users — the reach-out reminder assignee
+    // picker needs the roster, and everyone already sees all contacts anyway.
     await api(`collections/${usersCol.id}`, 'PATCH', {
-      listRule: "@request.auth.role = 'admin'",
+      listRule: "@request.auth.id != ''",
     }, token);
-    console.log('✅ Restricted users.listRule to admins');
+    console.log('✅ Set users.listRule to authenticated users');
   }
 
   // ── Create contacts collection ──────────────────────────────────────────────
@@ -205,6 +206,44 @@ async function main() {
       deleteRule: null,
     }, token);
     console.log('✅ Created activities collection');
+  }
+
+  // ── Create reminders collection ─────────────────────────────────────────────
+  // A follow-up reminder attached to an activity. Fired by pb_hooks/reachout.pb.js
+  // (emails `notify` at `remind_at`, then stamps `sent_at`). Personal: scoped to
+  // the creator / notified user. Read per-user by the notification bell.
+  const collections3 = await api('collections?perPage=200', 'GET', undefined, token);
+  const contactsCol2 = collections3.items.find((c) => c.name === 'contacts');
+  const activitiesCol = collections3.items.find((c) => c.name === 'activities');
+
+  if (collections3.items.some((c) => c.name === 'reminders')) {
+    console.log('⏭  reminders collection already exists');
+  } else {
+    await api('collections', 'POST', {
+      name: 'reminders',
+      type: 'base',
+      fields: [
+        { name: 'contact',    type: 'relation', required: true,  collectionId: contactsCol2.id,   cascadeDelete: true,  maxSelect: 1 },
+        { name: 'activity',   type: 'relation', required: true,  collectionId: activitiesCol.id,  cascadeDelete: true,  maxSelect: 1 },
+        { name: 'remind_at',  type: 'date',     required: true },
+        { name: 'notify',     type: 'relation', required: true,  collectionId: '_pb_users_auth_', cascadeDelete: false, maxSelect: 1 },
+        { name: 'created_by', type: 'relation', required: true,  collectionId: '_pb_users_auth_', cascadeDelete: false, maxSelect: 1 },
+        { name: 'sent_at',    type: 'date',     required: false },
+        { name: 'created',    type: 'autodate', onCreate: true,  onUpdate: false },
+        { name: 'updated',    type: 'autodate', onCreate: true,  onUpdate: true  },
+      ],
+      listRule:   "@request.auth.id != '' && (created_by = @request.auth.id || notify = @request.auth.id)",
+      viewRule:   "@request.auth.id != '' && (created_by = @request.auth.id || notify = @request.auth.id)",
+      createRule: "@request.auth.id != ''",
+      updateRule: "@request.auth.id != '' && created_by = @request.auth.id && sent_at = ''",
+      deleteRule: "@request.auth.id != '' && created_by = @request.auth.id",
+      indexes: [
+        'CREATE INDEX `idx_reminders_notify` ON `reminders` (`notify`)',
+        'CREATE INDEX `idx_reminders_due` ON `reminders` (`sent_at`, `remind_at`)',
+        'CREATE INDEX `idx_reminders_activity` ON `reminders` (`activity`)',
+      ],
+    }, token);
+    console.log('✅ Created reminders collection');
   }
 
   console.log('\n🎉 Setup complete! Your Rolodex database is ready.\n');

@@ -65,6 +65,24 @@ export interface ContactLog {
   created: string;
 }
 
+export interface Reminder {
+  id: string;
+  contact: string;
+  activity: string;
+  remind_at: string;
+  notify: string;
+  created_by: string;
+  sent_at?: string;
+  expand?: {
+    contact?: Contact;
+    activity?: Activity;
+    notify?: User;
+    created_by?: User;
+  };
+  created: string;
+  updated: string;
+}
+
 export interface Activity {
   id: string;
   contact: string;

@@ -6,6 +6,7 @@
   import { currentUser, theme, toasts, shortcutsHelp } from '$lib/stores';
   import Avatar from './Avatar.svelte';
   import ThemeToggle from './ThemeToggle.svelte';
+  import RemindersBell from './RemindersBell.svelte';
 
   const navItems = [
     {
@@ -40,13 +41,20 @@
   $: currentPath = $page.url.pathname;
 </script>
 
-<aside class="w-56 shrink-0 h-screen sticky top-0 flex flex-col bg-neutral-50 dark:bg-neutral-950 border-r border-neutral-100 dark:border-neutral-800">
+<!-- z-30: `sticky` makes this aside its own stacking context; without a z-index
+     it sits below <main>, trapping the reminders popover under the page content. -->
+<aside class="w-56 shrink-0 h-screen sticky top-0 z-30 flex flex-col bg-neutral-50 dark:bg-neutral-950 border-r border-neutral-100 dark:border-neutral-800">
   <!-- Logo -->
   <div class="px-5 py-5 border-b border-neutral-100 dark:border-neutral-800">
-    <a href="{base}/contacts" class="flex items-center gap-2">
-      <img src="{base}/logo-black.svg" alt="FOSS United" class="h-6 dark:hidden" />
-      <img src="{base}/logo-white.svg" alt="FOSS United" class="h-6 hidden dark:block" />
-    </a>
+    <div class="flex items-start justify-between gap-2">
+      <a href="{base}/contacts" class="flex items-center gap-2">
+        <img src="{base}/logo-black.svg" alt="FOSS United" class="h-6 dark:hidden" />
+        <img src="{base}/logo-white.svg" alt="FOSS United" class="h-6 hidden dark:block" />
+      </a>
+      <div class="-mr-1 -mt-1">
+        <RemindersBell placement="right" />
+      </div>
+    </div>
     <p class="text-[10px] text-neutral-400 dark:text-neutral-500 mt-1.5 font-medium tracking-widest uppercase">Rolodex</p>
   </div>
 

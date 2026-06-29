@@ -5,6 +5,7 @@
   import { goto } from '$app/navigation';
   import { currentUser, theme, shortcutsHelp } from '$lib/stores';
   import Sidebar from '$lib/components/Sidebar.svelte';
+  import RemindersBell from '$lib/components/RemindersBell.svelte';
   import Toasts from '$lib/components/Toasts.svelte';
   import ShortcutsHelp from '$lib/components/ShortcutsHelp.svelte';
   import '../app.css';
@@ -125,6 +126,9 @@
           <img src="{base}/logo-white.svg" alt="FOSS United" class="h-5 hidden dark:block" />
           <span class="text-[10px] text-neutral-400 dark:text-neutral-500 font-medium tracking-widest uppercase">Rolodex</span>
         </a>
+        <div class="ml-auto">
+          <RemindersBell placement="bottom-end" />
+        </div>
       </div>
       <slot />
     </main>

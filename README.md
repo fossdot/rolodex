@@ -85,7 +85,7 @@ Everything runs on a single Linux VPS. There are no third-party services that ho
 ## Security posture
 
 - **MFA enforced** — every login requires an email OTP as a second factor; no one can sign in with just a password
-- **Write restrictions** — members can only edit or delete contacts and activities they added; admins can do anything
+- **Write restrictions** — members can only edit or delete the contacts they added, and edit the activities they logged (activities can't be deleted); admins can edit anyone's
 - **No bulk export from the browser** — data can only be exported from the PocketBase admin panel, which admins access via SSH tunnel only
 - **Admin UI off the internet** — the PocketBase admin panel (`/_/`) is blocked at the reverse proxy; access requires an SSH tunnel to the server
 - **Forgery blocked at the server** — server-side hooks enforce that `added_by` and `logged_by` always match the authenticated user, regardless of what the browser sends

@@ -13,22 +13,17 @@
   import Lightbox from '$lib/components/Lightbox.svelte';
   import Reactions from '$lib/components/Reactions.svelte';
   import RichText from '$lib/components/RichText.svelte';
-  import RichTextEditor from '$lib/components/RichTextEditor.svelte';
-  import { sanitizeHtml, htmlToText } from '$lib/sanitizeHtml';
+  import ActivityForm from '$lib/components/ActivityForm.svelte';
 
   let contact: Contact | null = null;
   let activities: Activity[] = [];
   let loading = true;
   let showActivityForm = false;
-
-  // Activity form state
-  let actType = '';
-  let actEvent = '';
-  let actLink = '';
-  let actDate = new Date().toISOString().split('T')[0];
-  let actNotes = '';
   let actSaving = false;
-  let actErrors: Record<string, string> = {};
+
+  // Inline activity edit — the id of the activity currently open for editing.
+  let editingActivityId: string | null = null;
+  let editSaving = false;
 
   $: id = $page.params.id ?? '';
 
@@ -198,22 +193,40 @@
     return c.name || c.org || 'Unknown';
   }
 
-  async function saveActivity() {
-    actErrors = {};
-    if (!actType) actErrors.type = 'Select an activity type.';
-    if (!actEvent.trim()) actErrors.event = 'Event / context is required.';
-    if (!htmlToText(actNotes).trim()) actErrors.notes = 'Notes are required.';
-    if (Object.keys(actErrors).length) return;
+  type ActivityDraft = {
+    activity_type: string;
+    event_name: string;
+    event_link: string;
+    date: string;
+    notes: string;
+  };
 
+  // Opening the create form resets only the optional follow-up reminder — the
+  // ActivityForm itself mounts fresh, so its fields always start blank.
+  function openActivityForm() {
+    actRemind = false;
+    actRemindDate = '';
+    actRemindTime = DEFAULT_REMINDER_TIME;
+    actRemindTo = '';
+    showActivityForm = true;
+  }
+
+  function closeActivityForm() {
+    showActivityForm = false;
+    actRemind = false;
+  }
+
+  async function createActivity(e: CustomEvent<ActivityDraft>) {
+    const d = e.detail;
     actSaving = true;
     try {
       const newAct = await pb.collection('activities').create({
         contact: id,
-        activity_type: actType,
-        event_name: actEvent.trim(),
-        event_link: actLink.trim(),
-        date: actDate,
-        notes: sanitizeHtml(actNotes),
+        activity_type: d.activity_type,
+        event_name: d.event_name,
+        event_link: d.event_link,
+        date: d.date,
+        notes: d.notes,
         logged_by: $currentUser?.id,
       });
       const expanded = await pb.collection('activities').getOne<Activity>(newAct.id, { expand: 'logged_by' });
@@ -235,20 +248,35 @@
         }
       }
 
-      showActivityForm = false;
-      actType = '';
-      actEvent = '';
-      actLink = '';
-      actDate = new Date().toISOString().split('T')[0];
-      actNotes = '';
-      actRemind = false;
-      actRemindDate = '';
-      actRemindTime = DEFAULT_REMINDER_TIME;
+      closeActivityForm();
       toasts.success('Activity logged');
     } catch {
       toasts.error('Failed to log activity');
     } finally {
       actSaving = false;
+    }
+  }
+
+  async function updateActivity(activityId: string, d: ActivityDraft) {
+    editSaving = true;
+    try {
+      // contact / logged_by / deleted_* are intentionally omitted — they are
+      // immutable and re-pinned server-side on update.
+      await pb.collection('activities').update(activityId, {
+        activity_type: d.activity_type,
+        event_name: d.event_name,
+        event_link: d.event_link,
+        date: d.date,
+        notes: d.notes,
+      });
+      const expanded = await pb.collection('activities').getOne<Activity>(activityId, { expand: 'logged_by,deleted_by' });
+      activities = activities.map((a) => (a.id === activityId ? expanded : a));
+      editingActivityId = null;
+      toasts.success('Activity updated');
+    } catch {
+      toasts.error('Failed to update activity');
+    } finally {
+      editSaving = false;
     }
   }
 
@@ -282,6 +310,23 @@
   // Anyone signed in — employees and directors alike — can log activities
   // on any contact. Engagement is shared; logged_by is forced to self.
   $: canLogActivity = !!$currentUser && !contact?.deleted_at;
+
+  // Fixing a logged activity is limited to whoever logged it, or an admin —
+  // mirrors the server updateRule so the UI never offers an edit the API rejects.
+  function canEditActivity(a: Activity) {
+    return !a.deleted_at && !!$currentUser && ($currentUser.id === a.logged_by || $currentUser.role === 'admin');
+  }
+
+  // PocketBase stamps created == updated on insert, so a meaningfully-later
+  // `updated` marks an activity that was edited after it was first logged.
+  // PB returns space-separated datetimes (`2026-07-01 10:00:00Z`); normalise to
+  // ISO so Safari/Firefox parse them too (else the marker would never show).
+  function wasEdited(a: Activity) {
+    const ms = (s: string) => new Date(String(s ?? '').replace(' ', 'T')).getTime();
+    const c = ms(a.created);
+    const u = ms(a.updated);
+    return Number.isFinite(c) && Number.isFinite(u) && u - c > 2000;
+  }
 
   // ── Photo lightbox ───────────────────────────────────────────────────────────
   // The full-size original is only assigned (and therefore fetched) on click.
@@ -535,7 +580,7 @@
             {/if}
           </h2>
           {#if canLogActivity}
-            <button on:click={() => (showActivityForm = !showActivityForm)} class="btn-primary text-xs py-1.5 px-3">
+            <button on:click={() => (showActivityForm ? closeActivityForm() : openActivityForm())} class="btn-primary text-xs py-1.5 px-3">
               <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
                 <path d="M5 12h14M12 5v14"/>
               </svg>
@@ -574,39 +619,15 @@
 
         <!-- Activity form -->
         {#if showActivityForm}
-          <div class="card p-5 mb-4 animate-fade-in space-y-4">
-            <h3 class="text-sm font-medium text-neutral-900 dark:text-neutral-100">Log new activity</h3>
-            <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              <div>
-                <label for="act-type" class="label">Activity Type *</label>
-                <select id="act-type" bind:value={actType} class="input {actErrors.type ? 'ring-2 ring-red-400' : ''}">
-                  <option value="">Select type…</option>
-                  {#each ACTIVITY_TYPES as t}
-                    <option value={t.value}>{t.label}</option>
-                  {/each}
-                </select>
-                {#if actErrors.type}<p class="text-xs text-red-500 mt-1">{actErrors.type}</p>{/if}
-              </div>
-              <div>
-                <label for="act-date" class="label">Date</label>
-                <input id="act-date" type="date" bind:value={actDate} class="input" />
-              </div>
-              <div class="sm:col-span-2">
-                <label for="act-event" class="label">Event / Context *</label>
-                <input id="act-event" type="text" bind:value={actEvent} class="input {actErrors.event ? 'ring-2 ring-red-400' : ''}" placeholder="IndiaFOSS 2025, FOSS United Delhi Meetup…" />
-                {#if actErrors.event}<p class="text-xs text-red-500 mt-1">{actErrors.event}</p>{/if}
-              </div>
-              <div class="sm:col-span-2">
-                <label for="act-link" class="label">Event Link <span class="text-neutral-400 normal-case font-normal">(optional)</span></label>
-                <input id="act-link" type="url" bind:value={actLink} class="input" placeholder="https://fossunited.org/events/…" />
-              </div>
-              <div class="sm:col-span-2">
-                <label for="act-notes" class="label">Notes *</label>
-                <RichTextEditor id="act-notes" bind:value={actNotes} invalid={!!actErrors.notes} placeholder="What happened, follow-ups, context…" />
-                {#if actErrors.notes}<p class="text-xs text-red-500 mt-1">{actErrors.notes}</p>{/if}
-              </div>
-            </div>
-
+          <ActivityForm
+            idPrefix="act"
+            heading="Log new activity"
+            submitLabel="Save Activity"
+            saving={actSaving}
+            extraClass="mb-4"
+            on:save={createActivity}
+            on:cancel={closeActivityForm}
+          >
             <!-- Optional follow-up reminder, linked to this activity -->
             <div class="border-t border-neutral-100 dark:border-neutral-800 pt-3">
               {#if !actRemind}
@@ -630,19 +651,7 @@
                 </div>
               {/if}
             </div>
-
-            <div class="flex justify-end gap-2">
-              <button on:click={() => (showActivityForm = false)} class="btn-secondary text-sm py-1.5">Cancel</button>
-              <button on:click={saveActivity} disabled={actSaving} class="btn-primary text-sm py-1.5">
-                {#if actSaving}
-                  <div class="w-3.5 h-3.5 border-2 border-white/30 border-t-white rounded-full animate-spin"></div>
-                  Saving…
-                {:else}
-                  Save Activity
-                {/if}
-              </button>
-            </div>
-          </div>
+          </ActivityForm>
         {/if}
 
         <!-- Timeline -->
@@ -653,7 +662,7 @@
             </svg>
             <p class="text-sm text-neutral-500 dark:text-neutral-400">No activities logged yet</p>
             {#if canLogActivity}
-              <button on:click={() => (showActivityForm = true)} class="btn-ghost text-xs mt-3">Log first activity</button>
+              <button on:click={openActivityForm} class="btn-ghost text-xs mt-3">Log first activity</button>
             {/if}
           </div>
         {:else}
@@ -662,6 +671,17 @@
               {@const rems = remindersByActivity[activity.id] ?? []}
               {@const pendingRem = rems.find((r) => !r.sent_at)}
               {@const sentRems = rems.filter((r) => r.sent_at)}
+              {#if editingActivityId === activity.id}
+                <ActivityForm
+                  idPrefix={`act-edit-${activity.id}`}
+                  heading="Edit activity"
+                  submitLabel="Save Changes"
+                  saving={editSaving}
+                  initial={activity}
+                  on:save={(e) => updateActivity(activity.id, e.detail)}
+                  on:cancel={() => (editingActivityId = null)}
+                />
+              {:else}
               <div class="card px-4 py-3.5 flex items-start gap-3 group animate-fade-in {activity.deleted_at ? 'opacity-50' : ''}">
                 <div class="w-1.5 h-1.5 rounded-full {activity.deleted_at ? 'bg-red-400' : 'bg-accent dark:bg-accent-dark'} mt-2 shrink-0"></div>
                 <div class="flex-1 min-w-0">
@@ -669,7 +689,14 @@
                     <p class="text-sm font-medium text-neutral-900 dark:text-neutral-100 {activity.deleted_at ? 'line-through' : ''}">
                       {getActivityLabel(activity.activity_type)}
                     </p>
-                    <span class="text-xs text-neutral-400 dark:text-neutral-500 shrink-0">{formatDate(activity.date)}</span>
+                    <div class="flex items-center gap-1 shrink-0">
+                      {#if canEditActivity(activity)}
+                        <button on:click={() => (editingActivityId = activity.id)} class="btn-ghost p-1 text-neutral-400 hover:text-accent dark:hover:text-accent-dark" title="Edit activity" aria-label="Edit activity">
+                          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"/></svg>
+                        </button>
+                      {/if}
+                      <span class="text-xs text-neutral-400 dark:text-neutral-500">{formatDate(activity.date)}</span>
+                    </div>
                   </div>
                   {#if activity.event_name}
                     <p class="text-xs text-neutral-500 dark:text-neutral-400 mt-0.5">
@@ -686,6 +713,8 @@
                     by {activity.expand?.logged_by?.name || activity.expand?.logged_by?.email || 'Unknown'}
                     {#if activity.deleted_at}
                       · <span class="text-red-400">deleted {formatDate(activity.deleted_at)}</span>
+                    {:else if wasEdited(activity)}
+                      · edited {formatDate(activity.updated)}
                     {/if}
                   </p>
                   {#if !activity.deleted_at}
@@ -742,6 +771,7 @@
                   {/if}
                 </div>
               </div>
+              {/if}
             {/each}
           </div>
         {/if}

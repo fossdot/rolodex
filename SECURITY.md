@@ -56,7 +56,7 @@ Server-side hooks rewrite security-critical fields regardless of what the client
 
 ## 3. Data immutability and audit trail
 
-**Activities are append-only.** Once logged, an activity can never be edited or deleted through the API by anyone — including admins (`updateRule` and `deleteRule` are null). The history of who engaged whom is the organisation's institutional memory; it cannot be quietly rewritten.
+**Activities can be edited only by the person who logged them, or an admin** (`updateRule = "@request.auth.id = logged_by || @request.auth.role = 'admin'"`), so honest mistakes can be fixed without letting anyone rewrite someone else's engagement. An update can only touch the *content* (type, event, date, notes): a hook re-pins `logged_by`, `contact`, and the soft-delete fields to their stored values, so an edit can't reassign attribution (the engagement score stays ungameable), move an activity to another contact, or smuggle a delete. Every edit bumps `updated` and is surfaced as **edited** in the UI, so nothing changes silently. Activities still **cannot be deleted** through the API by anyone, including admins (`deleteRule` is null).
 
 **Deletes are soft.** "Deleting" a contact sets `deleted_at`/`deleted_by` — nothing is destroyed. Deleted records:
 - disappear for employees (filtered out by the read rules, not just hidden in the UI),

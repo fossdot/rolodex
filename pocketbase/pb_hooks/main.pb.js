@@ -110,6 +110,20 @@ onRecordCreateRequest((e) => {
     e.next();
 }, "activities");
 
+// On activity update (allowed for the logger or an admin so they can fix
+// mistakes), re-pin the immutable fields to their stored values. Editing may
+// only change an activity's content — never its attribution (logged_by), which
+// contact it belongs to, or its soft-delete state — no matter what the client
+// sends. Mirrors the contact update lock below.
+onRecordUpdateRequest((e) => {
+    const original = e.app.findRecordById("activities", e.record.id);
+    e.record.set("logged_by", original.get("logged_by"));
+    e.record.set("contact", original.get("contact"));
+    e.record.set("deleted_at", original.get("deleted_at"));
+    e.record.set("deleted_by", original.get("deleted_by"));
+    e.next();
+}, "activities");
+
 // Force editor = authenticated user on contact edit-log entries.
 onRecordCreateRequest((e) => {
     if (e.auth) {

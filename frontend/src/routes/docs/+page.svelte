@@ -116,12 +116,18 @@
           You can attach a follow-up reminder at the same time. Anyone can log activities on any contact —
           engagement is shared.
         </p>
+        <h3>Fixing a mistake</h3>
+        <p>
+          Made a typo or logged the wrong date? Click the <strong>✎</strong> on an activity to edit it. Only the
+          person who logged it — or an admin — can, and a corrected activity is marked <strong>edited</strong> so
+          the history stays honest.
+        </p>
         <h3>Reactions &amp; the feed</h3>
         <ul>
           <li>React to any activity with an emoji, WhatsApp-style.</li>
           <li>The <strong>Activities</strong> page shows interactions across the whole network, filterable by <strong>this week / month / quarter / year</strong> or a custom range.</li>
         </ul>
-        <p class="note">Activities are a permanent record — once logged they can't be edited or deleted.</p>
+        <p class="note">Activities stay in the shared history — they can't be deleted, only edited (by whoever logged them, or an admin) to fix errors.</p>
       </section>
 
       <section id="reminders">

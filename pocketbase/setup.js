@@ -201,8 +201,10 @@ async function main() {
       viewRule:   "@request.auth.id != '' && (deleted_at = null || @request.auth.role = 'admin')",
       // employees only, on their own contacts, and logged_by must be themselves
       createRule: "@request.auth.id != '' && @request.auth.role != 'admin' && @request.body.contact.added_by = @request.auth.id && @request.body.logged_by = @request.auth.id",
-      // immutable: nobody can edit or delete activities via the API
-      updateRule: null,
+      // editable only by whoever logged it, or an admin (to fix human errors);
+      // immutable fields are re-pinned by the update hook in pb_hooks/main.pb.js
+      updateRule: "@request.auth.id = logged_by || @request.auth.role = 'admin'",
+      // deletion still goes through the API to no one (soft-delete only)
       deleteRule: null,
     }, token);
     console.log('✅ Created activities collection');

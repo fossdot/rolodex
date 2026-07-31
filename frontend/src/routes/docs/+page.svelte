@@ -301,8 +301,18 @@
         </p>
         <p>
           Organisations are shared records, so start typing and pick the existing spelling rather than making a
-          near-duplicate. If it's genuinely new, choose <strong>Add “…”</strong> to create it. Renaming or removing
-          an organisation is admin-only, since it affects every contact linked to it.
+          near-duplicate. If it's genuinely new, choose <strong>Add “…”</strong> to create it.
+        </p>
+        <h3>Renaming, and merging duplicates</h3>
+        <p>
+          Admins can rename an organisation from its own page — the ✎ beside the heading. Because it's one shared
+          record, the new name applies to every contact linked to it in a single edit.
+        </p>
+        <p>
+          That's also how you merge two entries for the same place: rename one to exactly match the other and they
+          fold together, since organisation names are unique (case-insensitively). Useful for the
+          <code>Acme</code> / <code>Acme, Inc</code> pairs that accumulated while organisations were free text on
+          each contact.
         </p>
         <h3>A different title at each one</h3>
         <p>

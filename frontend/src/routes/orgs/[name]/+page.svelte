@@ -1,9 +1,10 @@
 <script lang="ts">
   import { base } from '$app/paths';
   import { page } from '$app/stores';
+  import { goto } from '$app/navigation';
   import { pb, photoUrl } from '$lib/pb';
-  import { toasts } from '$lib/stores';
-  import type { Contact, Activity, User } from '$lib/types';
+  import { currentUser, toasts } from '$lib/stores';
+  import type { Contact, Activity, Organisation, User } from '$lib/types';
   import { ACTIVITY_TYPES } from '$lib/constants';
   import Avatar from '$lib/components/Avatar.svelte';
   import { contactLabel } from '$lib/org';
@@ -15,6 +16,45 @@
   let activities: Activity[] = [];
   let loading = true;
   let loadedFor = ''; // guards the reactive reload on client-side navigation
+
+  // ── Renaming (admins only) ─────────────────────────────────────────────────
+  // Organisations are shared records, so renaming one relabels it for every
+  // contact linked to it — which is also how two near-duplicates get merged:
+  // rename one to exactly match the other and the unique index folds them.
+  let org: Organisation | null = null;
+  let renaming = false;
+  let draftName = '';
+  let renameError = '';
+  let renameSaving = false;
+  $: canRename = $currentUser?.role === 'admin';
+
+  function startRename() {
+    draftName = org?.name ?? orgName;
+    renameError = '';
+    renaming = true;
+  }
+
+  async function saveRename() {
+    const next = draftName.trim();
+    if (!org || !next || next === org.name) { renaming = false; return; }
+    renameSaving = true;
+    renameError = '';
+    try {
+      await pb.collection('organisations').update(org.id, { name: next });
+      toasts.success(`Renamed to “${next}” for all ${contacts.length} ${contacts.length === 1 ? 'contact' : 'contacts'}`);
+      renaming = false;
+      // The route is keyed by name, so move to the new URL.
+      await goto(`${base}/orgs/${encodeURIComponent(next)}`, { replaceState: true });
+    } catch (e: unknown) {
+      const msg = (e as { response?: { data?: Record<string, { message?: string }>; message?: string } })?.response;
+      // The collection has a case-insensitive unique index on `name`.
+      renameError = msg?.data?.name?.message
+        ? `An organisation called “${next}” already exists. To merge them, rename this one to match exactly and the duplicate is folded in.`
+        : (msg?.message || 'Could not rename this organisation.');
+    } finally {
+      renameSaving = false;
+    }
+  }
 
   async function load() {
     loading = true;
@@ -29,6 +69,14 @@
         expand: 'added_by,orgs',
       });
       contacts = cRes.items;
+      // The record itself, so a rename has an id to write to.
+      org = (cRes.items[0]?.expand?.orgs ?? []).find((o) => o.name === orgName) ?? null;
+      if (!org) {
+        const oRes = await pb.collection('organisations').getList<Organisation>(1, 1, {
+          filter: `name = '${escaped}'`,
+        });
+        org = oRes.items[0] ?? null;
+      }
 
       if (contacts.length) {
         // `contacts.id ?=` tests membership of the multi-relation (issue #6);
@@ -88,11 +136,48 @@
         <path d="m15 18-6-6 6-6"/>
       </svg>
     </a>
-    <div>
-      <h1 class="text-xl font-semibold text-neutral-900 dark:text-neutral-50 tracking-tight">{orgName}</h1>
-      <p class="text-sm text-neutral-500 dark:text-neutral-400 mt-0.5">
-        {loading ? '—' : `${contacts.length} ${contacts.length === 1 ? 'contact' : 'contacts'} · ${activities.length} ${activities.length === 1 ? 'activity' : 'activities'}`}
-      </p>
+    <div class="min-w-0 flex-1">
+      {#if renaming}
+        <!-- Renaming relabels this organisation for every linked contact. -->
+        <div class="flex flex-wrap items-center gap-2">
+          <input
+            type="text"
+            bind:value={draftName}
+            on:keydown={(e) => { if (e.key === 'Enter') saveRename(); if (e.key === 'Escape') renaming = false; }}
+            aria-label="Organisation name"
+            maxlength="200"
+            class="input w-auto min-w-64 text-lg font-semibold {renameError ? 'ring-2 ring-red-400' : ''}"
+          />
+          <button on:click={saveRename} disabled={renameSaving || !draftName.trim()} class="btn-primary text-sm py-1.5">
+            {renameSaving ? 'Saving…' : 'Save'}
+          </button>
+          <button on:click={() => (renaming = false)} class="btn-secondary text-sm py-1.5">Cancel</button>
+        </div>
+        {#if renameError}
+          <p class="text-xs text-red-500 mt-1.5 max-w-xl">{renameError}</p>
+        {:else}
+          <p class="text-xs text-neutral-400 dark:text-neutral-500 mt-1.5">
+            Applies to all {contacts.length} {contacts.length === 1 ? 'contact' : 'contacts'} here.
+          </p>
+        {/if}
+      {:else}
+        <div class="flex items-center gap-2">
+          <h1 class="text-xl font-semibold text-neutral-900 dark:text-neutral-50 tracking-tight truncate">{orgName}</h1>
+          {#if canRename && org}
+            <button
+              on:click={startRename}
+              class="btn-ghost p-1.5 text-neutral-400 hover:text-accent dark:hover:text-accent-dark shrink-0"
+              title="Rename organisation"
+              aria-label="Rename organisation"
+            >
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"/></svg>
+            </button>
+          {/if}
+        </div>
+        <p class="text-sm text-neutral-500 dark:text-neutral-400 mt-0.5">
+          {loading ? '—' : `${contacts.length} ${contacts.length === 1 ? 'contact' : 'contacts'} · ${activities.length} ${activities.length === 1 ? 'activity' : 'activities'}`}
+        </p>
+      {/if}
     </div>
   </div>
 

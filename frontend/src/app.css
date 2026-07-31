@@ -7,6 +7,14 @@
     font-family: 'Inter', system-ui, sans-serif;
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
+    /* The theme is a `.dark` class, which CSS alone can't communicate to the
+       browser's own widgets. Declaring color-scheme is what makes the native
+       date/time pickers, scrollbars and autofill render dark chrome — without
+       it Chrome draws its light-mode calendar over a dark page (issue #5). */
+    color-scheme: light;
+  }
+  html.dark {
+    color-scheme: dark;
   }
 
   ::-webkit-scrollbar {

@@ -5,6 +5,7 @@
   import { pb } from '$lib/pb';
   import { currentUser } from '$lib/stores';
   import type { Reminder } from '$lib/types';
+  import { primaryOrg } from '$lib/org';
 
   // 'right' → opens to the right of the sidebar; 'bottom-end' → drops below a top bar.
   export let placement: 'right' | 'bottom-end' = 'right';
@@ -31,7 +32,7 @@
 
   function contactName(r: Reminder) {
     const c = r.expand?.contact;
-    return c ? (c.name || c.org || 'Contact') : 'Contact';
+    return c ? (c.name || primaryOrg(c) || 'Contact') : 'Contact';
   }
 
   function activityLine(r: Reminder) {
@@ -49,12 +50,12 @@
         pb.collection('reminders').getFullList<Reminder>({
           filter: `notify = '${me}' && sent_at = ''`,
           sort: 'remind_at',
-          expand: 'contact,activity',
+          expand: 'contact.orgs,activity',
         }),
         pb.collection('reminders').getList<Reminder>(1, 25, {
           filter: `notify = '${me}' && sent_at != ''`,
           sort: '-remind_at',
-          expand: 'contact,activity',
+          expand: 'contact.orgs,activity',
         }).then((r) => r.items),
       ]);
       pending = p;

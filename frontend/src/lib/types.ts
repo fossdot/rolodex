@@ -8,11 +8,29 @@ export interface User {
   updated: string;
 }
 
+export interface Organisation {
+  id: string;
+  name: string;
+  created: string;
+  updated: string;
+}
+
 export interface Contact {
   id: string;
   name: string;
-  org: string;
+  /**
+   * Organisation ids, in display order — the first is the contact's primary
+   * organisation and the one compact UI shows. Read names via `$lib/org`
+   * helpers, which work off `expand.orgs`.
+   */
+  orgs: string[];
   designation: string;
+  /**
+   * Optional title per organisation, keyed by organisation id — a contact may be
+   * a Professor at one and a Maintainer at another. `designation` above stays the
+   * headline shown wherever only one line fits.
+   */
+  org_designations: Record<string, string>;
   city: string;
   country: string;
   email: string;
@@ -32,6 +50,7 @@ export interface Contact {
   expand?: {
     added_by?: User;
     deleted_by?: User;
+    orgs?: Organisation[];
   };
   created: string;
   updated: string;
@@ -70,13 +89,19 @@ export interface Reminder {
   contact: string;
   activity: string;
   remind_at: string;
+  /** The single assignee — whose bell this shows in, and the email's To. */
   notify: string;
+  /** Team members copied on the email (ids into `users`). Email only. */
+  cc: string[];
+  /** Comma-separated external addresses (e.g. a Google group). Email only. */
+  cc_emails: string;
   created_by: string;
   sent_at?: string;
   expand?: {
     contact?: Contact;
     activity?: Activity;
     notify?: User;
+    cc?: User[];
     created_by?: User;
   };
   created: string;
@@ -85,7 +110,18 @@ export interface Reminder {
 
 export interface Activity {
   id: string;
-  contact: string;
+  /**
+   * Everyone the activity involved (issue #6) — a summit might list a speaker,
+   * an organiser and a sponsor on one row. Always at least one, enforced by the
+   * activities hooks in pb_hooks/main.pb.js.
+   */
+  contacts: string[];
+  /**
+   * What each participant's part was, keyed by contact id — `{ <id>: 'speaker' }`.
+   * Values come from PARTICIPANT_ROLES; the server prunes entries for anyone not
+   * in `contacts` and rejects unknown roles.
+   */
+  contact_roles: Record<string, string>;
   activity_type: string;
   event_name: string;
   event_link: string;
@@ -96,7 +132,7 @@ export interface Activity {
   deleted_by?: string;
   expand?: {
     logged_by?: User;
-    contact?: Contact;
+    contacts?: Contact[];
     deleted_by?: User;
   };
   created: string;

@@ -6,6 +6,8 @@
   import type { Contact, Activity, User } from '$lib/types';
   import { ACTIVITY_TYPES } from '$lib/constants';
   import Avatar from '$lib/components/Avatar.svelte';
+  import { contactLabel } from '$lib/org';
+  import { participantLine } from '$lib/activity';
 
   $: orgName = decodeURIComponent($page.params.name ?? '');
 
@@ -19,20 +21,23 @@
     try {
       const escaped = orgName.replace(/\\/g, '\\\\').replace(/'/g, "\\'");
       const cRes = await pb.collection('contacts').getList<Contact>(1, 200, {
-        // case-insensitive exact match: ~ without wildcards still uses LIKE,
-        // so escape % and _ to avoid partial matches
-        filter: `org = '${escaped}' && deleted_at = null`,
+        // `orgs` is a multi-relation, so `?=` means "any of this contact's
+        // organisations is exactly this one" — an exact match, unlike `~`, so
+        // "Foundation" can't pull in "Foundation for Free Software".
+        filter: `orgs.name ?= '${escaped}' && deleted_at = null`,
         sort: 'name',
-        expand: 'added_by',
+        expand: 'added_by,orgs',
       });
       contacts = cRes.items;
 
       if (contacts.length) {
-        const orFilter = contacts.map((c) => `contact = '${c.id}'`).join(' || ');
+        // `contacts.id ?=` tests membership of the multi-relation (issue #6);
+        // a bare `contacts ?= '<id>'` matches nothing.
+        const orFilter = contacts.map((c) => `contacts.id ?= '${c.id}'`).join(' || ');
         const aRes = await pb.collection('activities').getList<Activity>(1, 200, {
           filter: `(${orFilter}) && deleted_at = null`,
           sort: '-date,-created',
-          expand: 'logged_by,contact',
+          expand: 'logged_by,contacts',
         });
         activities = aRes.items;
       } else {
@@ -133,7 +138,7 @@
         <div class="card divide-y divide-neutral-100 dark:divide-neutral-800">
           {#each contacts as contact (contact.id)}
             <a href="{base}/contacts/{contact.id}" class="flex items-center gap-3 px-4 py-3 hover:bg-neutral-50 dark:hover:bg-neutral-900 transition-colors group">
-              <Avatar name={contact.name || contact.org || '?'} size="sm" src={photoUrl(contact, '100x100')} />
+              <Avatar name={contactLabel(contact)} size="sm" src={photoUrl(contact, '100x100')} />
               <div class="flex-1 min-w-0">
                 <p class="text-sm font-medium text-neutral-900 dark:text-neutral-100 truncate group-hover:text-accent dark:group-hover:text-accent-dark transition-colors">
                   {contact.name || '—'}
@@ -168,10 +173,10 @@
                   <div class="flex items-start justify-between gap-2">
                     <p class="text-sm font-medium text-neutral-900 dark:text-neutral-100">
                       {getActivityLabel(act.activity_type)}
-                      {#if act.expand?.contact}
+                      {#if act.expand?.contacts?.length}
                         <span class="text-neutral-400 dark:text-neutral-500 font-normal">·</span>
                         <a href="{base}/contacts/{act.contact}" class="text-accent dark:text-accent-dark font-normal hover:underline">
-                          {act.expand.contact.name || act.expand.contact.org || 'Unknown'}
+                          {participantLine(act)}
                         </a>
                       {/if}
                     </p>

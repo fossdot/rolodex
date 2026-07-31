@@ -14,6 +14,9 @@
   export let heading = 'Log new activity';
   export let submitLabel = 'Save Activity';
   export let saving = false;
+  // Lets a parent block submission on something in the slot being invalid —
+  // e.g. a malformed CC address in the optional follow-up reminder.
+  export let disabled = false;
   // Unique per instance so two forms (create + an inline edit) never collide on
   // DOM ids / label associations.
   export let idPrefix = 'act';
@@ -87,7 +90,7 @@
 
   <div class="flex justify-end gap-2">
     <button on:click={() => dispatch('cancel')} class="btn-secondary text-sm py-1.5">Cancel</button>
-    <button on:click={submit} disabled={saving} class="btn-primary text-sm py-1.5">
+    <button on:click={submit} disabled={saving || disabled} class="btn-primary text-sm py-1.5">
       {#if saving}
         <div class="w-3.5 h-3.5 border-2 border-white/30 border-t-white rounded-full animate-spin"></div>
         Saving…

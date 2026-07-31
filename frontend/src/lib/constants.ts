@@ -31,6 +31,30 @@ export const TOPICS = [
   { value: 'other', label: 'Other' },
 ];
 
+// What a contact's part was in one particular activity — "Ananya spoke, Dev
+// sponsored, Rohit volunteered". Distinct from FU_ROLES, which describes a
+// person's standing with FOSS United in general rather than at a single event.
+//
+// Must stay in sync with PARTICIPANT_ROLE_VALUES in pocketbase/pb_hooks/utils.js,
+// which rejects anything outside this list.
+export const PARTICIPANT_ROLES = [
+  { value: 'speaker',    label: 'Speaker' },
+  { value: 'organiser',  label: 'Organiser' },
+  { value: 'volunteer',  label: 'Volunteer' },
+  { value: 'sponsor',    label: 'Sponsor' },
+  { value: 'attendee',   label: 'Attendee' },
+  { value: 'mentor',     label: 'Mentor' },
+  { value: 'judge',      label: 'Judge' },
+  { value: 'maintainer', label: 'Maintainer' },
+  { value: 'host',       label: 'Host' },
+  { value: 'other',      label: 'Other' },
+];
+
+/** Label for a participant role value; falls back to the raw value. */
+export function participantRoleLabel(v: string): string {
+  return PARTICIPANT_ROLES.find((r) => r.value === v)?.label ?? v;
+}
+
 export const ACTIVITY_TYPES = [
   // Speaking & content
   { value: 'proposed_talk',       label: 'Proposed a Talk' },

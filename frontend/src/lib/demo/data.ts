@@ -22,10 +22,24 @@ export const DEMO_USERS: Rec[] = [
 // The viewer is signed in as this user (an admin, so the demo shows everything).
 export const DEMO_AUTH_USER = DEMO_USERS[0];
 
+// Organisations are their own records (issue #8), so the demo registers each
+// distinct name as one and links contacts to it by id — mirroring the real
+// schema, where `contacts.orgs` is a multi-relation and the first entry is the
+// contact's primary organisation.
+const orgRegistry = new Map<string, { id: string; name: string }>();
+function orgIdsFor(org: string | string[]): string[] {
+  const names = Array.isArray(org) ? org : org ? [org] : [];
+  return names.map((n) => {
+    const key = n.toLowerCase();
+    if (!orgRegistry.has(key)) orgRegistry.set(key, { id: `o_${orgRegistry.size + 1}`, name: n });
+    return orgRegistry.get(key)!.id;
+  });
+}
+
 const c = (
   id: string,
   name: string,
-  org: string,
+  org: string | string[],
   designation: string,
   city: string,
   email: string,
@@ -37,7 +51,7 @@ const c = (
   created: string,
   extra: Partial<Rec> = {}
 ): Rec => ({
-  id, name, org, designation, city, country: 'India', email, mobile,
+  id, name, orgs: orgIdsFor(org), designation, org_designations: {}, city, country: 'India', email, mobile,
   secondary_email: '', secondary_mobile: '',
   how_you_know: `<p>${how}</p>`, linkedin: '', photo: '',
   fu_roles: roles, fu_roles_other: '', topics, topics_other: '',
@@ -47,18 +61,18 @@ const c = (
 
 // ── Contacts ────────────────────────────────────────────────────────────────
 export const DEMO_CONTACTS: Rec[] = [
-  c('c_ananya', 'Ananya Sharma', 'IIT Bombay', 'Professor, CSE', 'Mumbai', 'ananya@example.org', '+91 98200 11111', 'Keynote speaker at IndiaFOSS 2025; introduced by the Bombay meetup group.', ['speaker', 'mentor'], ['ai_ml', 'research'], 'u_admin', '2025-09-14'),
+  c('c_ananya', 'Ananya Sharma', ['IIT Bombay', 'FOSS United Bengaluru'], 'Professor, CSE', 'Mumbai', 'ananya@example.org', '+91 98200 11111', 'Keynote speaker at IndiaFOSS 2025; introduced by the Bombay meetup group.', ['speaker', 'mentor'], ['ai_ml', 'research'], 'u_admin', '2025-09-14'),
   c('c_dev', 'Dev Kumar', 'Zerodha', 'Engineering Lead', 'Bangalore', 'dev@example.org', '+91 99000 22222', 'Sponsor contact for FOSS Hack; very responsive.', ['sponsor'], ['open_source', 'finance'], 'u_rahul', '2025-09-22'),
   c('c_meera', 'Meera Pillai', 'Self-employed', 'Open Source Consultant', 'Kochi', 'meera@example.org', '+91 99461 33333', 'Long-time Kerala community organiser; hosts the Kochi meetup.', ['meetup_host', 'mentor'], ['community', 'devops'], 'u_sneha', '2025-10-03'),
   c('c_arjun', 'Arjun Reddy', 'NIT Warangal', 'Final-year Student', 'Warangal', 'arjun@example.org', '+91 90000 44444', 'FOSS Club ambassador; started a campus chapter this year.', ['foss_club_ambassador_student'], ['education', 'community'], 'u_karthik', '2025-10-19'),
-  c('c_fatima', 'Fatima Khan', 'Red Hat', 'Principal Engineer', 'Pune', 'fatima@example.org', '+91 98220 55555', 'Spoke on systemd internals; happy to mentor.', ['speaker', 'mentor', 'project_maintainer'], ['devops', 'open_source'], 'u_admin', '2025-11-01'),
+  c('c_fatima', 'Fatima Khan', ['Red Hat', 'Fedora Project'], 'Principal Engineer', 'Pune', 'fatima@example.org', '+91 98220 55555', 'Spoke on systemd internals; happy to mentor.', ['speaker', 'mentor', 'project_maintainer'], ['devops', 'open_source'], 'u_admin', '2025-11-01'),
   c('c_george', 'George Thomas', 'Infosys', 'VP Engineering', 'Bangalore', 'george@example.org', '+91 99001 66666', 'Potential corporate sponsor; met at NASSCOM event.', ['sponsor', 'gov_board_expert'], ['government', 'public_policy'], 'u_rahul', '2025-11-15'),
   c('c_priya', 'Priya Nair', 'Self-employed', 'UX Designer', 'Chennai', 'priya@example.org', '+91 90031 77777', 'Designed posters for Chennai meetup; great with community design.', ['organising_volunteer'], ['design', 'community'], 'u_sneha', '2025-11-28'),
   c('c_sameer', 'Sameer Joshi', 'Tata Elxsi', 'Hardware Architect', 'Pune', 'sameer@example.org', '+91 98221 88888', 'Hardware track judge; deep RISC-V knowledge.', ['mentor'], ['hardware', 'technologist'], 'u_karthik', '2025-12-06'),
   c('c_lakshmi', 'Lakshmi Rao', 'IISc Bangalore', 'PhD Researcher', 'Bangalore', 'lakshmi@example.org', '+91 99002 99999', 'Research collaborator; presented on ML reproducibility.', ['speaker'], ['ai_ml', 'research'], 'u_admin', '2025-12-20'),
   c('c_imran', 'Imran Sheikh', 'Freshworks', 'Staff Engineer', 'Chennai', 'imran@example.org', '+91 90032 10101', 'Reviewed grant applications last cycle.', ['mentor'], ['open_source', 'security'], 'u_rahul', '2026-01-08'),
   c('c_nisha', 'Nisha Gupta', 'Self-employed', 'Policy Researcher', 'Delhi', 'nisha@example.org', '+91 98110 12121', 'Public policy expert; advises on open data.', ['gov_board_expert'], ['public_policy', 'legal'], 'u_sneha', '2026-01-21'),
-  c('c_rohit', 'Rohit Desai', 'Razorpay', 'Backend Engineer', 'Bangalore', 'rohit@example.org', '+91 99003 13131', 'Volunteer at FOSS Hack; strong Go contributor.', ['organising_volunteer', 'project_maintainer'], ['open_source', 'devops'], 'u_karthik', '2026-02-04'),
+  c('c_rohit', 'Rohit Desai', ['Razorpay', 'GNOME Foundation', 'FOSS United Bengaluru'], 'Backend Engineer', 'Bangalore', 'rohit@example.org', '+91 99003 13131', 'Volunteer at FOSS Hack; strong Go contributor.', ['organising_volunteer', 'project_maintainer'], ['open_source', 'devops'], 'u_karthik', '2026-02-04'),
   c('c_anjali', 'Anjali Menon', 'Govt. of Kerala', 'IT Officer', 'Thiruvananthapuram', 'anjali@example.org', '+91 99461 14141', 'Government liaison for the state FOSS policy.', ['gov_board_expert'], ['government', 'public_policy'], 'u_admin', '2026-02-18'),
   c('c_vikram', 'Vikram Singh', 'Self-employed', 'DevRel Consultant', 'Jaipur', 'vikram@example.org', '+91 90001 15151', 'Helped run the Jaipur meetup; great community energy.', ['meetup_host', 'speaker'], ['community', 'devops'], 'u_rahul', '2026-03-05'),
   c('c_tara', 'Tara Krishnan', 'Swiggy', 'Data Scientist', 'Bangalore', 'tara@example.org', '+91 99004 16161', 'AI/ML workshop facilitator at IndiaFOSS.', ['speaker', 'mentor'], ['ai_ml', 'education'], 'u_sneha', '2026-03-22'),
@@ -70,15 +84,27 @@ export const DEMO_CONTACTS: Rec[] = [
 
 // ── Activities ──────────────────────────────────────────────────────────────
 let aId = 0;
-const a = (contact: string, type: string, event: string, date: string, notes: string, logged_by: string): Rec => ({
+// `contact` accepts one id or several — an activity can cover everyone who was
+// involved (issue #6), which is how the real `activities.contacts` relation works.
+const a = (
+  contact: string | string[], type: string, event: string, date: string, notes: string, logged_by: string,
+  // Optional part-per-participant, keyed by contact id — "who spoke, who sponsored".
+  contact_roles: Record<string, string> = {}
+): Rec => ({
   id: `a_${++aId}`,
-  contact, activity_type: type, event_name: event, event_link: '',
+  contacts: Array.isArray(contact) ? contact : [contact],
+  contact_roles,
+  activity_type: type, event_name: event, event_link: '',
   date, notes: `<p>${notes}</p>`, logged_by,
   deleted_at: '', deleted_by: '',
   created: ISO(date), updated: ISO(date),
 });
 
 export const DEMO_ACTIVITIES: Rec[] = [
+  // One shared activity covering everyone who was involved (issue #6) — logged
+  // once rather than repeated under each contact.
+  a(['c_ananya', 'c_dev', 'c_fatima', 'c_rohit'], 'attended_event', 'Open Source Summit 2026', '2026-05-14', 'Ananya keynoted, Dev sponsored the venue, Fatima ran the systemd track and Rohit volunteered on registrations.', 'u_admin',
+    { c_ananya: 'speaker', c_dev: 'sponsor', c_fatima: 'organiser', c_rohit: 'volunteer' }),
   a('c_ananya', 'spoke_at_event', 'IndiaFOSS 2025', '2025-09-20', 'Delivered the AI/ML keynote — packed room, great Q&A.', 'u_admin'),
   a('c_ananya', 'mentored_hackathon', 'FOSS Hack 2025', '2025-12-13', 'Mentored two student teams on ML tooling.', 'u_rahul'),
   a('c_dev', 'sponsored_event', 'FOSS Hack 2025', '2025-11-30', 'Zerodha confirmed gold-tier sponsorship.', 'u_rahul'),
@@ -132,11 +158,22 @@ export const DEMO_CONTACT_LOGS: Rec[] = [
   log('c_fatima', 'u_admin', '2026-06-18', [{ field: 'How you know them', from: 'Met at a conference.', to: 'Spoke on systemd internals; happy to mentor.' }]),
 ];
 
+// ── Organisations ───────────────────────────────────────────────────────────
+// Derived from the names used above, so there is exactly one record per org.
+// Declared after DEMO_CONTACTS because the registry is filled as they are built.
+export const DEMO_ORGS: Rec[] = [...orgRegistry.values()].map((o) => ({
+  id: o.id,
+  name: o.name,
+  created: ISO('2025-08-01'),
+  updated: ISO('2025-08-01'),
+}));
+
 export function freshDb(): Record<string, Rec[]> {
   // deep-ish clone so the demo can mutate freely and a reload resets it
-  const clone = (arr: Rec[]) => arr.map((x) => ({ ...x, fu_roles: Array.isArray(x.fu_roles) ? [...(x.fu_roles as string[])] : x.fu_roles, topics: Array.isArray(x.topics) ? [...(x.topics as string[])] : x.topics, changes: Array.isArray(x.changes) ? (x.changes as unknown[]).map((ch) => ({ ...(ch as object) })) : x.changes }));
+  const clone = (arr: Rec[]) => arr.map((x) => ({ ...x, fu_roles: Array.isArray(x.fu_roles) ? [...(x.fu_roles as string[])] : x.fu_roles, topics: Array.isArray(x.topics) ? [...(x.topics as string[])] : x.topics, orgs: Array.isArray(x.orgs) ? [...(x.orgs as string[])] : x.orgs, contacts: Array.isArray(x.contacts) ? [...(x.contacts as string[])] : x.contacts, contact_roles: x.contact_roles ? { ...(x.contact_roles as object) } : x.contact_roles, org_designations: x.org_designations ? { ...(x.org_designations as object) } : x.org_designations, changes: Array.isArray(x.changes) ? (x.changes as unknown[]).map((ch) => ({ ...(ch as object) })) : x.changes }));
   return {
     users: clone(DEMO_USERS),
+    organisations: clone(DEMO_ORGS),
     contacts: clone(DEMO_CONTACTS),
     activities: clone(DEMO_ACTIVITIES),
     reactions: clone(DEMO_REACTIONS),

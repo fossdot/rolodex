@@ -9,6 +9,7 @@
   import { FU_ROLES, TOPICS } from '$lib/constants';
   import Avatar from '$lib/components/Avatar.svelte';
   import CityInput from '$lib/components/CityInput.svelte';
+  import { contactLabel, orgLine, primaryOrg } from '$lib/org';
 
   /** 'mine' = only contacts added by the current user; 'all' = the full network */
   export let scope: 'mine' | 'all' = 'all';
@@ -37,14 +38,17 @@
         // activities_via_contact is PocketBase's back-relation from contacts
         // to activities; ?= matches if ANY of the related rows' logged_by is me.
         filters.push(
-          `(added_by = '${$currentUser.id}' || activities_via_contact.logged_by ?= '${$currentUser.id}')`
+          `(added_by = '${$currentUser.id}' || activities_via_contacts.logged_by ?= '${$currentUser.id}')`
         );
       }
       if (search.trim()) {
         const q = search.trim().replace(/\\/g, '\\\\').replace(/'/g, "\\'");
         // Also match contacts whose activity notes (comments) contain the query —
         // activities_via_contact is the back-relation; ?~ matches if ANY row's notes match.
-        filters.push(`(name ~ '${q}' || org ~ '${q}' || designation ~ '${q}' || how_you_know ~ '${q}' || email ~ '${q}' || mobile ~ '${q}' || city ~ '${q}' || activities_via_contact.notes ?~ '${q}')`);
+        // orgs is a multi-relation, so `?~` is needed to match if ANY of a
+        // contact's organisations contains the query (plain `~` would only
+        // consider one and quietly miss the rest).
+        filters.push(`(name ~ '${q}' || orgs.name ?~ '${q}' || designation ~ '${q}' || how_you_know ~ '${q}' || email ~ '${q}' || mobile ~ '${q}' || city ~ '${q}' || activities_via_contacts.notes ?~ '${q}')`);
       }
       if (filterCity.trim()) {
         const c = filterCity.trim().replace(/\\/g, '\\\\').replace(/'/g, "\\'");
@@ -64,7 +68,7 @@
       const items = await pb.collection('contacts').getFullList<Contact>({
         filter: filters.join(' && ') || '',
         sort: '-created',
-        expand: 'added_by',
+        expand: 'added_by,orgs',
         batch: 200,
       });
       if (seq !== loadSeq) return; // a newer load superseded this one
@@ -101,8 +105,25 @@
 
   $: activeFilters = filterRoles.length + filterTopics.length + (filterCity ? 1 : 0);
 
-  function displayName(c: Contact) {
-    return c.name || c.org || 'Unknown';
+  const displayName = contactLabel;
+
+  // Empty states get one light line, picked from the query so it stays put while
+  // you read it instead of reshuffling on every keystroke. The useful part (the
+  // nudge to the full Rolodex, the buttons) is never the joke.
+  const NO_MATCH_QUIPS = [
+    'Nobody here by that name 🤔',
+    'Drawing a blank 🗂️',
+    'Nothing in this drawer 🔍',
+    'No such person — in your contacts, anyway 🤷',
+  ];
+  const EMPTY_QUIPS = [
+    'Your Rolodex is suspiciously empty 🗂️',
+    'Nothing here yet — a blank slate ✨',
+  ];
+  function quip(list: string[], seed: string) {
+    let n = 0;
+    for (let i = 0; i < seed.length; i++) n = (n + seed.charCodeAt(i)) % 997;
+    return list[n % list.length];
   }
 
   // Resolves a role value to its display label; 'other' shows the contact's custom text.
@@ -253,7 +274,11 @@
 
   <!-- Empty state -->
   {:else if contacts.length === 0}
-    <div class="flex flex-col items-center justify-center py-20 text-center">
+    <!-- Constrained to the search column's width (max-w-md, same as the search
+         input) so on a wide screen this sits under the search box rather than
+         drifting to the middle of the page. Full width on phones, where the
+         search box already spans everything. -->
+    <div class="flex flex-col items-center justify-center py-12 sm:py-14 text-center sm:max-w-md">
       <div class="w-12 h-12 rounded-2xl bg-neutral-100 dark:bg-neutral-800 flex items-center justify-center mb-4">
         <svg class="text-neutral-400" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
           <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75"/>
@@ -263,10 +288,10 @@
         <!-- They searched their own contacts and came up empty — nudge them to
              the full network, carrying the query across. -->
         <p class="text-sm font-medium text-neutral-900 dark:text-neutral-100">
-          Nobody here by that name 🤔
+          {quip(NO_MATCH_QUIPS, search.trim())}
         </p>
         <p class="text-sm text-neutral-400 dark:text-neutral-500 mt-1 max-w-xs">
-          Psst — were you looking in the team Rolodex? They're not in <em>your</em> contacts, but they might be hiding in there.
+          Not in <em>your</em> contacts — but the team Rolodex is a bigger drawer. Worth a rummage.
         </p>
         <a
           href="{base}/rolodex?q={encodeURIComponent(search.trim())}"
@@ -279,12 +304,20 @@
         </a>
         <button on:click={clearFilters} class="btn-ghost text-sm mt-2">Clear search</button>
       {:else if search || activeFilters}
-        <p class="text-sm font-medium text-neutral-900 dark:text-neutral-100">No contacts match your search</p>
-        <p class="text-sm text-neutral-400 dark:text-neutral-500 mt-1">Try adjusting your filters</p>
+        <p class="text-sm font-medium text-neutral-900 dark:text-neutral-100">
+          {quip(NO_MATCH_QUIPS, search.trim() + activeFilters)}
+        </p>
+        <p class="text-sm text-neutral-400 dark:text-neutral-500 mt-1 max-w-xs">
+          {activeFilters ? 'Those filters are being picky. Loosen one?' : 'Try fewer letters — or a different spelling.'}
+        </p>
         <button on:click={clearFilters} class="btn-secondary mt-4">Clear filters</button>
       {:else}
-        <p class="text-sm font-medium text-neutral-900 dark:text-neutral-100">No contacts yet</p>
-        <p class="text-sm text-neutral-400 dark:text-neutral-500 mt-1">Add your first contact to get started</p>
+        <p class="text-sm font-medium text-neutral-900 dark:text-neutral-100">
+          {quip(EMPTY_QUIPS, scope)}
+        </p>
+        <p class="text-sm text-neutral-400 dark:text-neutral-500 mt-1 max-w-xs">
+          Add someone you met and it starts filling itself in.
+        </p>
         <a href="{base}/contacts/new" class="btn-primary mt-4">Add Contact</a>
       {/if}
     </div>
@@ -301,8 +334,11 @@
                 <p class="text-sm font-semibold text-neutral-900 dark:text-neutral-100 truncate group-hover:text-accent dark:group-hover:text-accent-dark transition-colors">
                   {contact.name || '—'}
                 </p>
-                {#if contact.org}
-                  <p class="text-xs text-neutral-500 dark:text-neutral-400 truncate">{contact.org}</p>
+                {#if primaryOrg(contact)}
+                  <!-- Primary org only — the rest are in the tooltip and on the profile. -->
+                  <p class="text-xs text-neutral-500 dark:text-neutral-400 truncate" title={orgLine(contact)}>
+                    {primaryOrg(contact)}{#if contact.orgs?.length > 1}<span class="text-neutral-400 dark:text-neutral-500"> +{contact.orgs.length - 1}</span>{/if}
+                  </p>
                 {/if}
                 {#if contact.designation}
                   <p class="text-xs text-neutral-400 dark:text-neutral-500 truncate">{contact.designation}</p>
@@ -353,8 +389,10 @@
                   {contact.name || '—'}
                 </p>
               </div>
-              {#if contact.org}
-                <p class="text-xs text-neutral-500 dark:text-neutral-400 truncate">{contact.org}</p>
+              {#if primaryOrg(contact)}
+                <p class="text-xs text-neutral-500 dark:text-neutral-400 truncate" title={orgLine(contact)}>
+                  {primaryOrg(contact)}{#if contact.orgs?.length > 1}<span class="text-neutral-400 dark:text-neutral-500"> +{contact.orgs.length - 1}</span>{/if}
+                </p>
               {/if}
             </div>
             <p class="text-xs text-neutral-500 dark:text-neutral-400 truncate col-span-1 hidden lg:block">{contact.designation || '—'}</p>

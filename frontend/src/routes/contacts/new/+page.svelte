@@ -6,13 +6,17 @@
   import { currentUser, toasts } from '$lib/stores';
   import { FU_ROLES, TOPICS, COUNTRIES } from '$lib/constants';
   import CityInput from '$lib/components/CityInput.svelte';
-  import OrgInput from '$lib/components/OrgInput.svelte';
+  import OrgsInput from '$lib/components/OrgsInput.svelte';
   import MultiSelect from '$lib/components/MultiSelect.svelte';
   import RichTextEditor from '$lib/components/RichTextEditor.svelte';
   import { sanitizeHtml, htmlToText } from '$lib/sanitizeHtml';
+  import { loadOrganisations, resolveOrgs } from '$lib/org';
+  import type { Organisation } from '$lib/types';
 
   let name = '';
-  let org = '';
+  let orgs: string[] = [];
+  // Optional title per org, keyed by org NAME while editing; re-keyed by id on save.
+  let orgDesignations: Record<string, string> = {};
   let designation = '';
   let city = '';
   let country = 'India';
@@ -27,15 +31,13 @@
   let topics: string[] = [];
   let topics_other = '';
 
-  // Org autocomplete: suggest spellings already in the database
-  let orgSuggestions: string[] = [];
+  // The organisation roster drives autocomplete and is what name→id resolution
+  // matches against on save, so one spelling per org is preserved.
+  let knownOrgs: Organisation[] = [];
+  $: orgSuggestions = knownOrgs.map((o) => o.name);
   onMount(async () => {
     try {
-      const r = await pb.collection('contacts').getList(1, 500, {
-        filter: "org != '' && deleted_at = null",
-        fields: 'org',
-      });
-      orgSuggestions = [...new Set(r.items.map((i) => String(i.org).trim()).filter(Boolean))].sort();
+      knownOrgs = await loadOrganisations();
     } catch {
       /* non-fatal — autocomplete just stays empty */
     }
@@ -46,7 +48,7 @@
 
   function validate() {
     errors = {};
-    if (!name.trim() && !org.trim()) errors.identity = 'Either Name or Organisation is required.';
+    if (!name.trim() && orgs.length === 0) errors.identity = 'Either Name or Organisation is required.';
     if (!email.trim() && !mobile.trim()) errors.contact = 'Either Email or Mobile is required.';
     if (email.trim() && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim())) errors.email = 'Enter a valid email address.';
     if (!htmlToText(how_you_know).trim()) errors.how_you_know = 'Tell us how you know them.';
@@ -61,10 +63,22 @@
     if (!validate()) return;
     loading = true;
     try {
+      // Organisations are created here, not while typing, so an abandoned form
+      // never leaves stray rows behind.
+      const { ids: orgIds, idByLowerName } = await resolveOrgs(orgs, knownOrgs);
+      // org_designations is keyed by org id, while the form held names.
+      const designationsById: Record<string, string> = {};
+      for (const [name, text] of Object.entries(orgDesignations)) {
+        const oid = idByLowerName.get(name.trim().toLowerCase());
+        if (oid && text.trim()) designationsById[oid] = text.trim();
+      }
+
       // FormData so the photo file and the multi-select arrays travel together
       const fd = new FormData();
       fd.append('name', name.trim());
-      fd.append('org', org.trim());
+      orgIds.forEach((oid) => fd.append('orgs', oid));
+      // A json field travels as a JSON string over multipart.
+      fd.append('org_designations', JSON.stringify(designationsById));
       fd.append('designation', designation.trim());
       fd.append('city', city.trim());
       fd.append('country', country);
@@ -143,7 +157,7 @@
         </div>
         <div>
           <label for="org" class="label">Organisation</label>
-          <OrgInput id="org" bind:value={org} suggestions={orgSuggestions} extraClass={errors.identity ? 'ring-2 ring-red-400' : ''} />
+          <OrgsInput id="org" bind:value={orgs} bind:designations={orgDesignations} suggestions={orgSuggestions} extraClass={errors.identity ? 'ring-2 ring-red-400' : ''} />
         </div>
         <div class="sm:col-span-2">
           <label for="designation" class="label">Designation <span class="text-neutral-400 normal-case font-normal">(optional)</span></label>

@@ -7,6 +7,8 @@
   import type { Activity, User, Contact } from '$lib/types';
   import { ACTIVITY_TYPES } from '$lib/constants';
   import Avatar from '$lib/components/Avatar.svelte';
+  import { contactLabel, primaryOrg } from '$lib/org';
+  import { participantLine } from '$lib/activity';
 
   let loading = true;
 
@@ -29,7 +31,7 @@
       const r = await pb.collection('contacts').getList<Contact>(1, 200, {
         filter: 'deleted_at != null',
         sort: '-deleted_at',
-        expand: 'added_by,deleted_by',
+        expand: 'added_by,deleted_by,orgs',
       });
       deletedContacts = r.items;
     } catch {
@@ -140,7 +142,7 @@
         pb.collection('users').getList<User>(1, 200),
         pb.collection('activities').getList<Activity>(1, 15, {
           sort: '-date,-created',
-          expand: 'logged_by,contact',
+          expand: 'logged_by,contacts.orgs',
           filter: withRange('deleted_at = null', aRange),
         }),
       ]);
@@ -311,13 +313,13 @@
         <div class="card divide-y divide-neutral-100 dark:divide-neutral-800">
           {#each deletedContacts as c (c.id)}
             <div class="flex items-center gap-3 px-3 sm:px-4 py-3">
-              <Avatar name={c.name || c.org || '?'} size="sm" />
+              <Avatar name={contactLabel(c)} size="sm" />
               <div class="flex-1 min-w-0">
                 <a href="{base}/contacts/{c.id}" class="text-sm font-medium text-neutral-900 dark:text-neutral-100 hover:text-accent dark:hover:text-accent-dark truncate block">
-                  {c.name || c.org || 'Unknown'}
+                  {contactLabel(c)}
                 </a>
                 <p class="text-xs text-neutral-400 dark:text-neutral-500 truncate">
-                  {c.org ? c.org + ' · ' : ''}deleted by {c.expand?.deleted_by?.name || c.expand?.deleted_by?.email || '?'} on {formatDate(c.deleted_at ?? '')}
+                  {primaryOrg(c) ? primaryOrg(c) + ' · ' : ''}deleted by {c.expand?.deleted_by?.name || c.expand?.deleted_by?.email || '?'} on {formatDate(c.deleted_at ?? '')}
                 </p>
               </div>
               <button on:click={() => restoreContact(c.id)} class="btn-secondary text-xs py-1.5 shrink-0">Restore</button>
@@ -419,9 +421,9 @@
                     <p class="text-xs font-medium text-neutral-900 dark:text-neutral-100">
                       {getActivityLabel(act.activity_type)}
                     </p>
-                    {#if act.expand?.contact}
+                    {#if act.expand?.contacts?.length}
                       <a href="{base}/contacts/{act.contact}" class="text-xs text-accent dark:text-accent-dark hover:underline truncate block">
-                        {act.expand.contact.name || act.expand.contact.org || 'Unknown'}
+                        {participantLine(act)}
                       </a>
                     {/if}
                     {#if act.event_name}

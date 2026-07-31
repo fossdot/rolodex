@@ -5,18 +5,20 @@
   import { goto } from '$app/navigation';
   import { pb } from '$lib/pb';
   import { currentUser, toasts } from '$lib/stores';
-  import type { Contact, ContactLogChange } from '$lib/types';
+  import type { Contact, ContactLogChange, Organisation } from '$lib/types';
   import { FU_ROLES, TOPICS, COUNTRIES } from '$lib/constants';
   import CityInput from '$lib/components/CityInput.svelte';
-  import OrgInput from '$lib/components/OrgInput.svelte';
+  import OrgsInput from '$lib/components/OrgsInput.svelte';
   import MultiSelect from '$lib/components/MultiSelect.svelte';
   import RichTextEditor from '$lib/components/RichTextEditor.svelte';
   import { sanitizeHtml, htmlToText } from '$lib/sanitizeHtml';
+  import { loadOrganisations, orgEntries, orgNames, resolveOrgs } from '$lib/org';
 
   $: id = $page.params.id ?? '';
 
   let name = '';
-  let org = '';
+  let orgs: string[] = [];
+  let orgDesignations: Record<string, string> = {};
   let designation = '';
   let city = '';
   let country = 'India';
@@ -31,7 +33,8 @@
   let topics: string[] = [];
   let topics_other = '';
 
-  let orgSuggestions: string[] = [];
+  let knownOrgs: Organisation[] = [];
+  $: orgSuggestions = knownOrgs.map((o) => o.name);
 
   // Snapshot of the values as loaded, used to diff what changed on save.
   let original: Record<string, unknown> = {};
@@ -42,9 +45,13 @@
 
   onMount(async () => {
     try {
-      const c = await pb.collection('contacts').getOne<Contact>(id);
+      const c = await pb.collection('contacts').getOne<Contact>(id, { expand: 'orgs' });
       name = c.name ?? '';
-      org = c.org ?? '';
+      orgs = orgNames(c);
+      // Stored by org id; the form works in names.
+      orgDesignations = Object.fromEntries(
+        orgEntries(c).filter((o) => o.designation).map((o) => [o.name, o.designation])
+      );
       designation = c.designation ?? '';
       city = c.city ?? '';
       country = c.country || 'India';
@@ -59,7 +66,7 @@
       topics_other = c.topics_other ?? '';
       topics = c.topics ?? [];
       original = {
-        name, org, designation, city, country, email, mobile,
+        name, orgs: [...orgs], orgDesignations: { ...orgDesignations }, designation, city, country, email, mobile,
         secondary_email, secondary_mobile, how_you_know, linkedin,
         fu_roles: [...fu_roles], fu_roles_other, topics: [...topics], topics_other,
       };
@@ -72,11 +79,7 @@
     }
 
     try {
-      const r = await pb.collection('contacts').getList(1, 500, {
-        filter: "org != '' && deleted_at = null",
-        fields: 'org',
-      });
-      orgSuggestions = [...new Set(r.items.map((i) => String(i.org).trim()).filter(Boolean))].sort();
+      knownOrgs = await loadOrganisations();
     } catch {
       /* non-fatal */
     }
@@ -95,7 +98,6 @@
       if (from !== to) out.push({ field, from: from || '—', to: to || '—' });
     };
     scalar('Name', original.name, name);
-    scalar('Organisation', original.org, org);
     scalar('Designation', original.designation, designation);
     scalar('City', original.city, city);
     scalar('Country', original.country, country);
@@ -109,6 +111,20 @@
     const hykFrom = htmlToText(String(original.how_you_know ?? ''));
     const hykTo = htmlToText(how_you_know);
     if (hykFrom !== hykTo) out.push({ field: 'How you know them', from: hykFrom || '—', to: hykTo || '—' });
+
+    // Organisations are diffed in order, not sorted — the first one is the
+    // primary, so a reorder is a real change worth recording.
+    const orgsFrom = ((original.orgs as string[]) ?? []).join(', ');
+    const orgsTo = orgs.join(', ');
+    if (orgsFrom !== orgsTo) out.push({ field: 'Organisations', from: orgsFrom || '—', to: orgsTo || '—' });
+
+    // "IIT Bombay — Professor, CSE" per org, so a title change is auditable.
+    const fmtDesignations = (m: Record<string, string>) =>
+      Object.entries(m ?? {}).filter(([, v]) => v?.trim())
+        .map(([k, v]) => `${k} — ${v.trim()}`).sort().join('; ');
+    const desFrom = fmtDesignations(original.orgDesignations as Record<string, string>);
+    const desTo = fmtDesignations(orgDesignations);
+    if (desFrom !== desTo) out.push({ field: 'Designations by organisation', from: desFrom || '—', to: desTo || '—' });
 
     const rolesFrom = [...((original.fu_roles as string[]) ?? [])].sort().map(roleLabel).join(', ');
     const rolesTo = [...fu_roles].sort().map(roleLabel).join(', ');
@@ -125,7 +141,7 @@
 
   function validate() {
     errors = {};
-    if (!name.trim() && !org.trim()) errors.identity = 'Either Name or Organisation is required.';
+    if (!name.trim() && orgs.length === 0) errors.identity = 'Either Name or Organisation is required.';
     if (!email.trim() && !mobile.trim()) errors.contact = 'Either Email or Mobile is required.';
     if (email.trim() && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim())) errors.email = 'Enter a valid email address.';
     if (!htmlToText(how_you_know).trim()) errors.how_you_know = 'Tell us how you know them.';
@@ -140,9 +156,20 @@
     if (!validate()) return;
     saving = true;
     try {
+      const { ids: orgIds, idByLowerName } = await resolveOrgs(orgs, knownOrgs);
+      const designationsById: Record<string, string> = {};
+      for (const [name, text] of Object.entries(orgDesignations)) {
+        const oid = idByLowerName.get(name.trim().toLowerCase());
+        if (oid && text.trim()) designationsById[oid] = text.trim();
+      }
+
       const fd = new FormData();
       fd.append('name', name.trim());
-      fd.append('org', org.trim());
+      // An empty string is how multipart clears a multi-relation; appending
+      // nothing would leave the previous organisations in place.
+      if (orgIds.length) orgIds.forEach((oid) => fd.append('orgs', oid));
+      else fd.append('orgs', '');
+      fd.append('org_designations', JSON.stringify(designationsById));
       fd.append('designation', designation.trim());
       fd.append('city', city.trim());
       fd.append('country', country);
@@ -215,7 +242,7 @@
         </a>
         <div class="min-w-0">
           <h1 class="text-xl font-semibold text-neutral-900 dark:text-neutral-50 tracking-tight">Edit Contact</h1>
-          <p class="text-sm text-neutral-500 dark:text-neutral-400 mt-0.5 truncate">{name || org || 'Contact'}</p>
+          <p class="text-sm text-neutral-500 dark:text-neutral-400 mt-0.5 truncate">{name || orgs[0] || 'Contact'}</p>
         </div>
       </div>
       <!-- Top-right save for laptop view; the bottom button stays for narrow screens -->
@@ -237,7 +264,7 @@
           </div>
           <div>
             <label for="org" class="label">Organisation</label>
-            <OrgInput id="org" bind:value={org} suggestions={orgSuggestions} extraClass={errors.identity ? 'ring-2 ring-red-400' : ''} />
+            <OrgsInput id="org" bind:value={orgs} bind:designations={orgDesignations} suggestions={orgSuggestions} extraClass={errors.identity ? 'ring-2 ring-red-400' : ''} />
           </div>
           <div class="sm:col-span-2">
             <label for="designation" class="label">Designation <span class="text-neutral-400 normal-case font-normal">(optional)</span></label>

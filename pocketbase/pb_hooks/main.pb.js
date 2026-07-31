@@ -86,9 +86,13 @@ onRecordUpdateRequest((e) => {
 // Also: when 'other' is picked in fu_roles/topics, the matching free-text
 // field must be filled (the schema can't express conditional requirements).
 onRecordCreateRequest((e) => {
+    const { normaliseOrgDesignations } = require(`${__hooks}/utils.js`);
     if (e.auth) {
         e.record.set("added_by", e.auth.id);
     }
+
+    // Per-organisation titles are pruned to the orgs actually linked.
+    normaliseOrgDesignations(e.record);
 
     const roles = e.record.get("fu_roles") || [];
     if (roles.includes && roles.includes("other") && String(e.record.get("fu_roles_other") || "").trim() === "") {
@@ -111,16 +115,100 @@ onRecordCreateRequest((e) => {
 }, "activities");
 
 // On activity update (allowed for the logger or an admin so they can fix
-// mistakes), re-pin the immutable fields to their stored values. Editing may
-// only change an activity's content — never its attribution (logged_by), which
-// contact it belongs to, or its soft-delete state — no matter what the client
-// sends. Mirrors the contact update lock below.
+// mistakes), re-pin the immutable fields to their stored values. A content edit
+// may never change an activity's attribution (logged_by) or which contact it
+// belongs to, no matter what the client sends.
+//
+// Soft delete/restore is the one exception. It is handled explicitly below so
+// that `deleted_by` is always stamped from the authenticated caller rather than
+// the request body, restoring stays admin-only, and an ordinary content edit
+// can't drift the soft-delete state. Mirrors the contact update lock below.
 onRecordUpdateRequest((e) => {
     const original = e.app.findRecordById("activities", e.record.id);
+
     e.record.set("logged_by", original.get("logged_by"));
-    e.record.set("contact", original.get("contact"));
-    e.record.set("deleted_at", original.get("deleted_at"));
-    e.record.set("deleted_by", original.get("deleted_by"));
+
+    // The participant list IS content now that an activity can cover several
+    // contacts (issue #6) — correcting who attended is a normal edit, so unlike
+    // `logged_by` it is not re-pinned. Any pending follow-up whose contact has
+    // been dropped from the activity is cleared below.
+
+    // e.record is the merged record (original + incoming changes), so these
+    // read final state — a partial update like soft-delete works as expected.
+    const wasDeleted = original.getString("deleted_at") !== "";
+    const isNowDeleted = e.record.getString("deleted_at") !== "";
+
+    if (!wasDeleted && isNowDeleted) {
+        // Soft delete. The updateRule already limits this to the activity's
+        // logger or an admin; stamp who did it rather than trust the client.
+        e.record.set("deleted_by", e.auth ? e.auth.id : "");
+
+        // Pending follow-ups on a deleted activity would email everyone about
+        // an interaction that no longer exists, so drop them. Only unsent ones:
+        // `sent_at` rows are history. Best-effort — the reachout cron re-checks
+        // the activity's deleted state before sending, so a failure here can't
+        // leak a stale reminder. Restoring does not bring reminders back.
+        try {
+            const stale = e.app.findRecordsByFilter("reminders",
+                "activity = {:a} && sent_at = ''", "", 200, 0, { a: original.id });
+            for (const rem of stale) e.app.delete(rem);
+        } catch (err) {
+            e.app.logger().warn("Could not clear reminders for deleted activity",
+                "activity", original.id, "error", String(err));
+        }
+    } else if (wasDeleted && !isNowDeleted) {
+        // Restore is admin-only, matching contacts.
+        const isSuperuser = e.auth && e.auth.collection().name === "_superusers";
+        if (!isSuperuser && (!e.auth || e.auth.getString("role") !== "admin")) {
+            throw new ForbiddenError("Only admins can restore deleted activities.");
+        }
+        e.record.set("deleted_by", "");
+    } else {
+        // Plain content edit — the soft-delete state is not up for negotiation.
+        e.record.set("deleted_at", original.get("deleted_at"));
+        e.record.set("deleted_by", original.get("deleted_by"));
+
+        // Removing a participant orphans any follow-up aimed at them on this
+        // activity, so drop those. Only unsent ones; `sent_at` rows are history.
+        try {
+            const stillOn = {};
+            const after = e.record.get("contacts");
+            if (Array.isArray(after)) for (const cid of after) stillOn[cid] = true;
+
+            const pending = e.app.findRecordsByFilter("reminders",
+                "activity = {:a} && sent_at = ''", "", 200, 0, { a: original.id });
+            for (const rem of pending) {
+                if (!stillOn[rem.getString("contact")]) e.app.delete(rem);
+            }
+        } catch (err) {
+            e.app.logger().warn("Could not reconcile reminders after an activity edit",
+                "activity", original.id, "error", String(err));
+        }
+    }
+
+    // Never let an edit strand an activity with nobody on it.
+    const after = e.record.get("contacts");
+    if (!Array.isArray(after) || after.length === 0) {
+        throw new BadRequestError("An activity needs at least one contact.");
+    }
+
+    // Roles follow the participant list — a dropped participant loses theirs.
+    const { normaliseContactRoles } = require(`${__hooks}/utils.js`);
+    normaliseContactRoles(e.record);
+
+    e.next();
+}, "activities");
+
+// An activity must name at least one contact — the schema can't express
+// "required" on a relation without also forcing it on every partial update, so
+// it is checked here on the way in.
+onRecordCreateRequest((e) => {
+    const { normaliseContactRoles } = require(`${__hooks}/utils.js`);
+    const ids = e.record.get("contacts");
+    if (!Array.isArray(ids) || ids.length === 0) {
+        throw new BadRequestError("An activity needs at least one contact.");
+    }
+    normaliseContactRoles(e.record);
     e.next();
 }, "activities");
 
@@ -177,6 +265,10 @@ onRecordUpdateRequest((e) => {
         }
         e.record.set("deleted_by", "");
     }
+
+    // Designations follow the organisation list — unlinking an org drops its title.
+    const { normaliseOrgDesignations } = require(`${__hooks}/utils.js`);
+    normaliseOrgDesignations(e.record);
 
     // e.record is the merged record (original + incoming changes), so these
     // checks see final state — partial updates like soft-delete pass as long

@@ -9,12 +9,24 @@
 // trivial — `remind_at <= now` — and recovers reminders that came due while the
 // server was down.
 
-// Force created_by to the caller (and default notify to them) on create.
+// Force created_by to the caller (and default notify to them) on create, and
+// normalise the free-text CC list (issue #7). `normaliseCcEmails` has to be
+// required *inside* the handler — hook bodies run in their own runtime and can't
+// see this file's scope. See pb_hooks/utils.js.
 onRecordCreateRequest((e) => {
+    const { normaliseCcEmails } = require(`${__hooks}/utils.js`);
     if (e.auth) {
         e.record.set("created_by", e.auth.id);
         if (!e.record.getString("notify")) e.record.set("notify", e.auth.id);
     }
+    normaliseCcEmails(e.record);
+    e.next();
+}, "reminders");
+
+// Editing a pending reminder can change its CC list too.
+onRecordUpdateRequest((e) => {
+    const { normaliseCcEmails } = require(`${__hooks}/utils.js`);
+    normaliseCcEmails(e.record);
     e.next();
 }, "reminders");
 
@@ -77,13 +89,64 @@ cronAdd("reachout-reminders", "*/5 * * * *", () => {
                 const toEmail = user.getString("email");
                 if (!toEmail) continue;
 
+                // ── CC recipients (issue #7) ────────────────────────────────────────
+                // Team members from the roster, then any external addresses. The
+                // assignee is never CC'd on their own reminder, and duplicates
+                // across the two lists collapse.
+                const ccAddrs = [];
+                const ccLabels = [];
+                const seenAddr = {};
+                seenAddr[toEmail.toLowerCase()] = true;
+
+                const ccIds = rem.get("cc");
+                if (Array.isArray(ccIds)) {
+                    for (const uid of ccIds) {
+                        let cu;
+                        try { cu = $app.findRecordById("users", uid); }
+                        catch (e) { continue; } // CC'd user was removed
+                        const addr = cu.getString("email");
+                        if (!addr || seenAddr[addr.toLowerCase()]) continue;
+                        seenAddr[addr.toLowerCase()] = true;
+                        ccAddrs.push({ address: addr });
+                        ccLabels.push(cu.getString("name") || addr);
+                    }
+                }
+                for (const part of String(rem.getString("cc_emails") || "").split(",")) {
+                    const addr = part.trim();
+                    if (!addr || seenAddr[addr.toLowerCase()]) continue;
+                    seenAddr[addr.toLowerCase()] = true;
+                    ccAddrs.push({ address: addr });
+                    ccLabels.push(addr);
+                }
+
                 // Activity this reminder follows up on (the reason it's useful).
                 let activity = null;
                 try { activity = $app.findRecordById("activities", rem.getString("activity")); } catch (e) { /* may be gone */ }
 
+                // Skip (and clean up) follow-ups whose activity was deleted —
+                // same treatment as a deleted contact above. The delete hook
+                // already clears these on soft-delete; this is the safety net
+                // for anything it missed.
+                if (activity && activity.getString("deleted_at") !== "") {
+                    $app.delete(rem);
+                    continue;
+                }
+
                 // ── contact metadata (useful when forwarded internally) ─────────────
-                const cname = contact.getString("name") || contact.getString("org") || "your contact";
-                const subtitle = [contact.getString("designation"), contact.getString("org")].filter(Boolean).join(", ");
+                // Organisations are a multi-relation (issue #8). The first one is
+                // the contact's primary org, which is what this email shows.
+                const orgNames = [];
+                const orgIds = contact.get("orgs");
+                if (Array.isArray(orgIds)) {
+                    for (const oid of orgIds) {
+                        try { orgNames.push($app.findRecordById("organisations", oid).getString("name")); }
+                        catch (e) { /* org row removed */ }
+                    }
+                }
+                const primaryOrg = orgNames.length ? orgNames[0] : "";
+
+                const cname = contact.getString("name") || primaryOrg || "your contact";
+                const subtitle = [contact.getString("designation"), primaryOrg].filter(Boolean).join(", ");
                 const link = appURL ? `${appURL}/contacts/${contact.id}` : "";
 
                 let addedByName = "";
@@ -112,6 +175,9 @@ cronAdd("reachout-reminders", "*/5 * * * *", () => {
                 row("LinkedIn", liHref ? `<a href="${esc(liHref)}" style="color:#278F5E;text-decoration:none">${esc(li)}</a>` : "");
                 row("FOSS United", esc(humanizeList(contact.get("fu_roles"))));
                 row("Topics", esc(humanizeList(contact.get("topics"))));
+                // Only worth a row when there is more than the primary org, which
+                // already appears in the subtitle above.
+                row("Organisations", orgNames.length > 1 ? esc(orgNames.join(", ")) : "");
                 row("Added by", addedByName ? esc(addedByName) : "");
 
                 // ── activity context block ──────────────────────────────────────────
@@ -146,7 +212,7 @@ cronAdd("reachout-reminders", "*/5 * * * *", () => {
                     (link
                         ? `<p style="margin:0 0 18px"><a href="${esc(link)}" style="display:inline-block;background:#278F5E;color:#ffffff;text-decoration:none;padding:9px 16px;border-radius:8px;font-size:14px;font-weight:600">Open contact in Rolodex →</a></p>`
                         : "") +
-                    `<p style="margin:0;color:#9ca3af;font-size:12px">${when ? `Scheduled for ${esc(when)}. ` : ""}This reminder won't repeat — set a new follow-up on the activity for another nudge.</p>` +
+                    `<p style="margin:0;color:#9ca3af;font-size:12px">${when ? `Scheduled for ${esc(when)}. ` : ""}${ccLabels.length ? `Copied to ${esc(ccLabels.join(", "))}. ` : ""}This reminder won't repeat — set a new follow-up on the activity for another nudge.</p>` +
                     `</div>`;
 
                 const textLines = [`Hi${user.getString("name") ? " " + user.getString("name") : ""},`, "",
@@ -158,17 +224,21 @@ cronAdd("reachout-reminders", "*/5 * * * *", () => {
                 if (location) textLines.push(`Location: ${location}`);
                 if (humanizeList(contact.get("fu_roles"))) textLines.push(`FOSS United: ${humanizeList(contact.get("fu_roles"))}`);
                 if (humanizeList(contact.get("topics"))) textLines.push(`Topics: ${humanizeList(contact.get("topics"))}`);
+                if (orgNames.length > 1) textLines.push(`Organisations: ${orgNames.join(", ")}`);
                 if (addedByName) textLines.push(`Added by: ${addedByName}`);
                 if (link) { textLines.push("", `Open: ${link}`); }
+                if (ccLabels.length) { textLines.push("", `Copied to: ${ccLabels.join(", ")}`); }
                 if (when) { textLines.push("", `Scheduled for ${when}. Won't repeat.`); }
 
-                const message = new MailerMessage({
+                const messageData = {
                     from: { address: settings.meta.senderAddress, name: settings.meta.senderName },
                     to: [{ address: toEmail }],
                     subject: `Reach out to ${cname} today`,
                     html: html,
                     text: textLines.join("\n"),
-                });
+                };
+                if (ccAddrs.length) messageData.cc = ccAddrs;
+                const message = new MailerMessage(messageData);
 
                 mailClient.send(message);
 
@@ -177,7 +247,7 @@ cronAdd("reachout-reminders", "*/5 * * * *", () => {
                 rem.set("sent_at", nowUTC);
                 $app.save(rem);
 
-                $app.logger().info("Sent reach-out reminder", "reminder", rem.id, "contact", contact.id, "to", toEmail);
+                $app.logger().info("Sent reach-out reminder", "reminder", rem.id, "contact", contact.id, "to", toEmail, "cc", ccAddrs.length);
             } catch (err) {
                 $app.logger().error("Reach-out reminder failed", "reminder", rem.id, "error", String(err));
             }

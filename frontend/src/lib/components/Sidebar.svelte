@@ -20,6 +20,13 @@
       icon: `<svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75"/></svg>`,
     },
     {
+      // Logging is its own workflow (issue #6) — one entry covering everyone who
+      // was involved, rather than repeating it under each contact.
+      href: '/activities/new',
+      label: 'Log Activity',
+      icon: `<svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg>`,
+    },
+    {
       href: '/orgs',
       label: 'Organisations',
       icon: `<svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 22V4a2 2 0 0 1 2-2h8a2 2 0 0 1 2 2v18Z"/><path d="M6 12H4a2 2 0 0 0-2 2v6a2 2 0 0 0 2 2h2"/><path d="M18 9h2a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2h-2"/><path d="M10 6h4M10 10h4M10 14h4M10 18h4"/></svg>`,
@@ -39,6 +46,14 @@
 
   $: isAdmin = $currentUser?.role === 'admin';
   $: currentPath = $page.url.pathname;
+
+  // Longest matching prefix wins, so /activities/new highlights "Log Activity"
+  // alone instead of also lighting up "Activities" (which it starts with).
+  $: activeHref =
+    navItems
+      .map((i) => i.href)
+      .filter((href) => currentPath === base + href || currentPath.startsWith(`${base + href}/`))
+      .sort((a, b) => b.length - a.length)[0] ?? '';
 </script>
 
 <!-- z-30: `sticky` makes this aside its own stacking context; without a z-index
@@ -64,7 +79,7 @@
       <a
         href={base + item.href}
         class="flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-all duration-100
-          {currentPath.startsWith(base + item.href)
+          {activeHref === item.href
             ? 'bg-neutral-900 dark:bg-white text-white dark:text-neutral-900'
             : 'text-neutral-600 dark:text-neutral-400 hover:bg-neutral-100 dark:hover:bg-neutral-900 hover:text-neutral-900 dark:hover:text-neutral-100'}"
       >

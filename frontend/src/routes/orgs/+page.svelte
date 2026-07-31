@@ -3,9 +3,11 @@
   import { onMount } from 'svelte';
   import { pb } from '$lib/pb';
   import { toasts } from '$lib/stores';
+  import type { Contact } from '$lib/types';
 
   interface OrgGroup {
-    name: string; // display name (most common original casing)
+    id: string;
+    name: string;
     count: number;
     cities: string[];
   }
@@ -17,33 +19,30 @@
 
   onMount(async () => {
     try {
-      // getFullList pages through all contacts so org groups and their counts
-      // are complete — getList(1, 500) silently dropped orgs past 500 contacts.
-      const items = await pb.collection('contacts').getFullList({
-        filter: "org != '' && deleted_at = null",
-        fields: 'id,org,city',
+      // Organisations are their own records now, so the display name is simply
+      // the org's name — no reconciling of rival spellings. A contact belonging
+      // to several orgs counts towards each of them.
+      const items = await pb.collection('contacts').getFullList<Contact>({
+        // No "has an org" clause: PocketBase cannot express emptiness on a
+        // multi-relation (`orgs != ''` matches every row). Contacts without an
+        // organisation simply contribute nothing to the grouping below.
+        filter: "deleted_at = null",
+        expand: 'orgs',
         batch: 500,
       });
 
-      // Group case-insensitively; display the casing used most often.
-      const groups = new Map<string, { casings: Map<string, number>; count: number; cities: Set<string> }>();
-      for (const item of items) {
-        const raw = String(item.org).trim();
-        if (!raw) continue;
-        const key = raw.toLowerCase();
-        if (!groups.has(key)) groups.set(key, { casings: new Map(), count: 0, cities: new Set() });
-        const g = groups.get(key)!;
-        g.count += 1;
-        g.casings.set(raw, (g.casings.get(raw) ?? 0) + 1);
-        if (item.city) g.cities.add(String(item.city));
+      const groups = new Map<string, { name: string; count: number; cities: Set<string> }>();
+      for (const contact of items) {
+        for (const org of contact.expand?.orgs ?? []) {
+          if (!groups.has(org.id)) groups.set(org.id, { name: org.name, count: 0, cities: new Set() });
+          const g = groups.get(org.id)!;
+          g.count += 1;
+          if (contact.city) g.cities.add(String(contact.city));
+        }
       }
 
-      orgs = [...groups.values()]
-        .map((g) => ({
-          name: [...g.casings.entries()].sort((a, b) => b[1] - a[1])[0][0],
-          count: g.count,
-          cities: [...g.cities].sort(),
-        }))
+      orgs = [...groups.entries()]
+        .map(([id, g]) => ({ id, name: g.name, count: g.count, cities: [...g.cities].sort() }))
         .sort((a, b) => b.count - a.count || a.name.localeCompare(b.name));
     } catch {
       toasts.error('Failed to load organisations');
@@ -52,36 +51,42 @@
     }
   });
 
-  // A search matches an org by its name, any linked contact (name/email/
-  // mobile/city), or any activity note on those contacts — resolved
-  // server-side, then we show the org groups that have a matching contact.
-  let matchKeys: Set<string> | null = null; // null = no active search
+  // A search matches an org by its own name, or by any linked contact
+  // (name/email/mobile/city) or activity note on those contacts.
+  //
+  // The contact query deliberately omits the org name: matching on it there
+  // would drag in a contact's *unrelated* orgs too, so that searching "gnome"
+  // also listed the employer of everyone at GNOME. Org names are matched
+  // separately against the roster we already have.
+  let matchIds: Set<string> | null = null; // null = no active search
   let debounceTimer: ReturnType<typeof setTimeout>;
   let searchSeq = 0; // drop a slow search response if a newer one started
 
   async function runSearch() {
     const q = search.trim();
     if (!q) {
-      matchKeys = null;
+      matchIds = null;
       return;
     }
     clearTimeout(debounceTimer);
     debounceTimer = setTimeout(async () => {
       const seq = ++searchSeq;
       const esc = q.replace(/\\/g, '\\\\').replace(/'/g, "\\'");
+      const byName = orgs.filter((o) => o.name.toLowerCase().includes(q.toLowerCase())).map((o) => o.id);
       try {
         // getFullList so an org isn't missed from search results past 500 matches.
-        const items = await pb.collection('contacts').getFullList({
+        const items = await pb.collection('contacts').getFullList<Contact>({
           filter:
-            `deleted_at = null && org != '' && ` +
-            `(org ~ '${esc}' || name ~ '${esc}' || email ~ '${esc}' || mobile ~ '${esc}' || city ~ '${esc}' || activities_via_contact.notes ?~ '${esc}')`,
-          fields: 'org',
+            `deleted_at = null && ` +
+            `(name ~ '${esc}' || email ~ '${esc}' || mobile ~ '${esc}' || city ~ '${esc}' || activities_via_contacts.notes ?~ '${esc}')`,
+          expand: 'orgs',
           batch: 500,
         });
         if (seq !== searchSeq) return; // superseded by a newer search
-        matchKeys = new Set(items.map((i) => String(i.org).trim().toLowerCase()));
+        const viaContacts = items.flatMap((c) => (c.expand?.orgs ?? []).map((o) => o.id));
+        matchIds = new Set([...byName, ...viaContacts]);
       } catch {
-        if (seq === searchSeq) matchKeys = new Set();
+        if (seq === searchSeq) matchIds = new Set(byName);
       }
     }, 300);
   }
@@ -89,7 +94,7 @@
   $: search, runSearch();
   // All cities across the network, for the filter dropdown.
   $: allCities = [...new Set(orgs.flatMap((o) => o.cities))].sort((a, b) => a.localeCompare(b));
-  $: shown = (matchKeys === null ? orgs : orgs.filter((o) => matchKeys!.has(o.name.toLowerCase())))
+  $: shown = (matchIds === null ? orgs : orgs.filter((o) => matchIds!.has(o.id)))
     .filter((o) => !filterCity || o.cities.includes(filterCity));
 </script>
 
@@ -155,7 +160,7 @@
     </div>
   {:else}
     <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
-      {#each shown as org (org.name)}
+      {#each shown as org (org.id)}
         <a
           href="{base}/orgs/{encodeURIComponent(org.name)}"
           class="card p-4 transition-all duration-150 hover:shadow-md hover:border-neutral-200 dark:hover:border-neutral-700 group"

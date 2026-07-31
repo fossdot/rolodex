@@ -6,8 +6,10 @@
   import { pb, photoUrl } from '$lib/pb';
   import { currentUser, toasts } from '$lib/stores';
   import type { Contact, Activity, Reaction, User, ContactLog, Reminder } from '$lib/types';
-  import { FU_ROLES, TOPICS, ACTIVITY_TYPES } from '$lib/constants';
+  import { FU_ROLES, TOPICS, ACTIVITY_TYPES, PARTICIPANT_ROLES } from '$lib/constants';
   import { istToUtc, utcToIstParts, DEFAULT_REMINDER_TIME } from '$lib/reminder';
+  import { contactLabel, orgEntries } from '$lib/org';
+  import { otherParticipants, roleLabel } from '$lib/activity';
   import Avatar from '$lib/components/Avatar.svelte';
   import ReminderFields from '$lib/components/ReminderFields.svelte';
   import Lightbox from '$lib/components/Lightbox.svelte';
@@ -24,6 +26,29 @@
   // Inline activity edit — the id of the activity currently open for editing.
   let editingActivityId: string | null = null;
   let editSaving = false;
+  // Participant roles being edited, keyed by contact id. Seeded from the record
+  // each time the editor opens so a cancelled edit leaves nothing behind.
+  let editRoles: Record<string, string> = {};
+  // Only the dropdowns the user actually touched. Saving asserts nothing about
+  // the rest, so a role set by someone else while this form was open survives —
+  // "I didn't change it" must not mean "clear it".
+  let editRoleTouched = new Set<string>();
+
+  function openActivityEdit(activity: Activity) {
+    editRoles = { ...(activity.contact_roles ?? {}) };
+    editRoleTouched = new Set();
+    editingActivityId = activity.id;
+  }
+
+  // Reassign rather than mutate, so the change is picked up.
+  function setEditRole(contactId: string, role: string) {
+    editRoleTouched = new Set(editRoleTouched).add(contactId);
+    if (role) editRoles = { ...editRoles, [contactId]: role };
+    else {
+      const { [contactId]: _cleared, ...rest } = editRoles;
+      editRoles = rest;
+    }
+  }
 
   $: id = $page.params.id ?? '';
 
@@ -41,6 +66,9 @@
   let remDate = '';
   let remTime = DEFAULT_REMINDER_TIME;
   let remTo = '';
+  let remCc: string[] = [];
+  let remCcEmails = '';
+  let remInvalid = false;
   let remSaving = false;
 
   // Log-activity form: optional follow-up reminder
@@ -48,6 +76,11 @@
   let actRemindDate = '';
   let actRemindTime = DEFAULT_REMINDER_TIME;
   let actRemindTo = '';
+  // This contact's part in the activity being logged (optional).
+  let actRole = '';
+  let actRemindCc: string[] = [];
+  let actRemindCcEmails = '';
+  let actRemindInvalid = false;
 
   // The notify roster is only needed when a reminder form opens — fetch on demand.
   async function ensureUsers() {
@@ -66,7 +99,7 @@
       const all = await pb.collection('reminders').getFullList<Reminder>({
         filter: `contact = '${id}'`,
         sort: 'remind_at',
-        expand: 'notify',
+        expand: 'notify,cc',
       });
       const map: Record<string, Reminder[]> = {};
       for (const r of all) (map[r.activity] ??= []).push(r);
@@ -83,11 +116,13 @@
     remDate = parts.date || todayStr;
     remTime = parts.time;
     remTo = existing?.notify || $currentUser?.id || '';
+    remCc = existing?.cc ? [...existing.cc] : [];
+    remCcEmails = existing?.cc_emails ?? '';
     editingReminderFor = activityId;
   }
 
   async function saveActivityReminder() {
-    if (!editingReminderFor || !remDate) return;
+    if (!editingReminderFor || !remDate || remInvalid) return;
     remSaving = true;
     try {
       const payload = {
@@ -95,6 +130,8 @@
         activity: editingReminderFor,
         remind_at: istToUtc(remDate, remTime),
         notify: remTo || $currentUser?.id,
+        cc: remCc,
+        cc_emails: remCcEmails,
         created_by: $currentUser?.id, // also forced server-side
       };
       if (remEditingId) await pb.collection('reminders').update(remEditingId, payload);
@@ -102,11 +139,20 @@
       await loadReminders();
       editingReminderFor = null;
       toasts.success('Reminder saved');
-    } catch {
-      toasts.error('Failed to save reminder');
+    } catch (e: unknown) {
+      // Surfaces the server's CC-address validation message verbatim.
+      const msg = (e as { response?: { message?: string } })?.response?.message;
+      toasts.error(msg || 'Failed to save reminder');
     } finally {
       remSaving = false;
     }
+  }
+
+  // "Rahul Verma, team@fossunited.org" — teammates then external addresses.
+  function ccLabel(rem: Reminder) {
+    const people = (rem.expand?.cc ?? []).map((u) => u.name || u.email);
+    const external = (rem.cc_emails ?? '').split(',').map((s) => s.trim()).filter(Boolean);
+    return [...people, ...external].join(', ');
   }
 
   async function deleteReminder(rem: Reminder) {
@@ -164,11 +210,15 @@
     loading = true;
     try {
       [contact, activities] = await Promise.all([
-        pb.collection('contacts').getOne<Contact>(id, { expand: 'added_by,deleted_by' }),
+        pb.collection('contacts').getOne<Contact>(id, { expand: 'added_by,deleted_by,orgs' }),
         pb.collection('activities').getList<Activity>(1, 100, {
-          filter: `contact = '${id}'`,
+          // `contacts.id ?= …` is how PocketBase tests membership of a
+          // multi-relation: it hops to the related records and matches any one of
+          // them. A bare `contacts ?= '<id>'` silently matches nothing.
+          filter: `contacts.id ?= '${id}'`,
           sort: '-date,-created',
-          expand: 'logged_by,deleted_by',
+          // `contacts` so a row can show who else was there.
+          expand: 'logged_by,contacts',
         }).then((r) => r.items),
       ]);
       loadReactions(activities.map((a) => a.id));
@@ -189,8 +239,13 @@
   function getActivityLabel(v: string) { return ACTIVITY_TYPES.find((a) => a.value === v)?.label ?? v; }
 
   function displayName(c: Contact | null) {
-    if (!c) return '';
-    return c.name || c.org || 'Unknown';
+    return c ? contactLabel(c) : '';
+  }
+
+  // Everyone else on a shared activity — an activity can cover several contacts,
+  // and this timeline is scoped to one of them.
+  function others(a: Activity) {
+    return otherParticipants(a, id);
   }
 
   type ActivityDraft = {
@@ -204,10 +259,13 @@
   // Opening the create form resets only the optional follow-up reminder — the
   // ActivityForm itself mounts fresh, so its fields always start blank.
   function openActivityForm() {
+    actRole = '';
     actRemind = false;
     actRemindDate = '';
     actRemindTime = DEFAULT_REMINDER_TIME;
     actRemindTo = '';
+    actRemindCc = [];
+    actRemindCcEmails = '';
     showActivityForm = true;
   }
 
@@ -221,7 +279,10 @@
     actSaving = true;
     try {
       const newAct = await pb.collection('activities').create({
-        contact: id,
+        // Logging from a contact's page covers just them; /activities/new is
+        // where an activity gets several participants.
+        contacts: [id],
+        contact_roles: actRole ? { [id]: actRole } : {},
         activity_type: d.activity_type,
         event_name: d.event_name,
         event_link: d.event_link,
@@ -229,7 +290,7 @@
         notes: d.notes,
         logged_by: $currentUser?.id,
       });
-      const expanded = await pb.collection('activities').getOne<Activity>(newAct.id, { expand: 'logged_by' });
+      const expanded = await pb.collection('activities').getOne<Activity>(newAct.id, { expand: 'logged_by,contacts' });
       activities = [expanded, ...activities];
 
       // Optional follow-up reminder, born with the activity.
@@ -240,11 +301,14 @@
             activity: newAct.id,
             remind_at: istToUtc(actRemindDate, actRemindTime),
             notify: actRemindTo || $currentUser?.id,
+            cc: actRemindCc,
+            cc_emails: actRemindCcEmails,
             created_by: $currentUser?.id,
           });
           await loadReminders();
-        } catch {
-          toasts.error('Activity saved, but the reminder could not be set');
+        } catch (e: unknown) {
+          const msg = (e as { response?: { message?: string } })?.response?.message;
+          toasts.error(msg ? `Activity saved, but the reminder failed: ${msg}` : 'Activity saved, but the reminder could not be set');
         }
       }
 
@@ -262,14 +326,27 @@
     try {
       // contact / logged_by / deleted_* are intentionally omitted — they are
       // immutable and re-pinned server-side on update.
+      // PocketBase replaces a json field wholesale, so sending this form's map
+      // as-is would wipe a role another user set after the form was opened.
+      // Re-read, then apply our changes only to the participants we displayed.
+      const fresh = await pb.collection('activities').getOne<Activity>(activityId);
+      const mergedRoles: Record<string, string> = { ...(fresh.contact_roles ?? {}) };
+      for (const cid of editRoleTouched) {
+        if (editRoles[cid]) mergedRoles[cid] = editRoles[cid];
+        else delete mergedRoles[cid];
+      }
+
       await pb.collection('activities').update(activityId, {
         activity_type: d.activity_type,
         event_name: d.event_name,
         event_link: d.event_link,
         date: d.date,
         notes: d.notes,
+        // Correcting who did what is part of editing an activity. The server
+        // prunes roles for anyone no longer on it.
+        contact_roles: mergedRoles,
       });
-      const expanded = await pb.collection('activities').getOne<Activity>(activityId, { expand: 'logged_by,deleted_by' });
+      const expanded = await pb.collection('activities').getOne<Activity>(activityId, { expand: 'logged_by,contacts' });
       activities = activities.map((a) => (a.id === activityId ? expanded : a));
       editingActivityId = null;
       toasts.success('Activity updated');
@@ -277,6 +354,35 @@
       toasts.error('Failed to update activity');
     } finally {
       editSaving = false;
+    }
+  }
+
+  /**
+   * Delete an activity: it leaves the app entirely, for everyone.
+   *
+   * The row itself is only soft-deleted — `deleted_at`/`deleted_by` are stamped
+   * and it stays in the database, readable in the PocketBase dashboard, which is
+   * where an accidental delete gets undone. The collection's list/view rules hide
+   * it from every app user (admins included), so there is nothing to render and
+   * no in-app restore.
+   */
+  async function deleteActivity(activity: Activity) {
+    if (!confirm(
+      'Delete this activity?\n\nIt will disappear from Rolodex for everyone, along with any pending follow-up reminders on it. ' +
+      'The record is kept in the database, so an admin can recover it there if this was a mistake.'
+    )) return;
+    try {
+      await pb.collection('activities').update(activity.id, {
+        deleted_at: new Date().toISOString(),
+        deleted_by: $currentUser?.id, // also stamped server-side
+      });
+      activities = activities.filter((a) => a.id !== activity.id);
+      if (editingActivityId === activity.id) editingActivityId = null;
+      if (editingReminderFor === activity.id) editingReminderFor = null;
+      await loadReminders();
+      toasts.success('Activity deleted');
+    } catch {
+      toasts.error('Failed to delete activity');
     }
   }
 
@@ -311,10 +417,11 @@
   // on any contact. Engagement is shared; logged_by is forced to self.
   $: canLogActivity = !!$currentUser && !contact?.deleted_at;
 
-  // Fixing a logged activity is limited to whoever logged it, or an admin —
-  // mirrors the server updateRule so the UI never offers an edit the API rejects.
+  // Fixing or deleting a logged activity is limited to whoever logged it, or an
+  // admin — mirrors the server updateRule so the UI never offers an action the
+  // API rejects. Both share one gate because both rules are `logged_by || admin`.
   function canEditActivity(a: Activity) {
-    return !a.deleted_at && !!$currentUser && ($currentUser.id === a.logged_by || $currentUser.role === 'admin');
+    return !!$currentUser && ($currentUser.id === a.logged_by || $currentUser.role === 'admin');
   }
 
   // PocketBase stamps created == updated on insert, so a meaningfully-later
@@ -411,12 +518,20 @@
           <h1 class="text-xl font-semibold text-neutral-900 dark:text-neutral-50 tracking-tight">
             {contact.name || '—'}
           </h1>
-          {#if contact.org}
-            <p class="text-sm text-neutral-500 dark:text-neutral-400">
-              {contact.designation ? `${contact.designation} · ` : ''}<a href="{base}/orgs/{encodeURIComponent(contact.org)}" class="hover:text-accent dark:hover:text-accent-dark hover:underline transition-colors">{contact.org}</a>
-            </p>
-          {:else if contact.designation}
+          {#if contact.designation}
             <p class="text-sm text-neutral-500 dark:text-neutral-400">{contact.designation}</p>
+          {/if}
+          {#if orgEntries(contact).length}
+            <!-- Every organisation, each with the title held there when one is
+                 recorded. The first is the primary one. -->
+            <p class="text-sm text-neutral-500 dark:text-neutral-400 flex flex-wrap items-center gap-x-1.5">
+              {#each orgEntries(contact) as entry, i (entry.id)}
+                <span>
+                  <a href="{base}/orgs/{encodeURIComponent(entry.name)}" class="hover:text-accent dark:hover:text-accent-dark hover:underline transition-colors">{entry.name}</a>
+                  {#if entry.designation}<span class="text-neutral-400 dark:text-neutral-500"> — {entry.designation}</span>{/if}{#if i < orgEntries(contact).length - 1}<span class="text-neutral-300 dark:text-neutral-600">&nbsp;·</span>{/if}
+                </span>
+              {/each}
+            </p>
           {/if}
         </div>
       </div>
@@ -624,10 +739,25 @@
             heading="Log new activity"
             submitLabel="Save Activity"
             saving={actSaving}
+            disabled={actRemind && actRemindInvalid}
             extraClass="mb-4"
             on:save={createActivity}
             on:cancel={closeActivityForm}
           >
+            <!-- This contact's part in the activity. The multi-contact form at
+                 /activities/new offers the same per person. -->
+            <div class="border-t border-neutral-100 dark:border-neutral-800 pt-3">
+              <label for="act-role" class="label">
+                Their role <span class="text-neutral-400 normal-case font-normal">(optional)</span>
+              </label>
+              <select id="act-role" bind:value={actRole} class="input w-auto min-w-40">
+                <option value="">Not recorded</option>
+                {#each PARTICIPANT_ROLES as r (r.value)}
+                  <option value={r.value}>{r.label}</option>
+                {/each}
+              </select>
+            </div>
+
             <!-- Optional follow-up reminder, linked to this activity -->
             <div class="border-t border-neutral-100 dark:border-neutral-800 pt-3">
               {#if !actRemind}
@@ -646,8 +776,19 @@
                       <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18M6 6l12 12"/></svg>
                     </button>
                   </div>
-                  <p class="text-[11px] text-neutral-500 dark:text-neutral-400 -mt-1.5">You'll be emailed at the chosen IST time; this activity's context is included. Defaults to 10 AM.</p>
-                  <ReminderFields bind:date={actRemindDate} bind:time={actRemindTime} bind:notify={actRemindTo} {users} currentUserId={$currentUser?.id ?? ''} minDate={todayStr} idPrefix="act-rem" />
+                  <p class="text-[11px] text-neutral-500 dark:text-neutral-400 -mt-1.5">The assignee is emailed at the chosen IST time; this activity's context is included. Defaults to 10 AM. Add a CC to copy teammates or a group.</p>
+                  <ReminderFields
+                    bind:date={actRemindDate}
+                    bind:time={actRemindTime}
+                    bind:notify={actRemindTo}
+                    bind:cc={actRemindCc}
+                    bind:ccEmails={actRemindCcEmails}
+                    bind:invalid={actRemindInvalid}
+                    {users}
+                    currentUserId={$currentUser?.id ?? ''}
+                    minDate={todayStr}
+                    idPrefix="act-rem"
+                  />
                 </div>
               {/if}
             </div>
@@ -680,19 +821,56 @@
                   initial={activity}
                   on:save={(e) => updateActivity(activity.id, e.detail)}
                   on:cancel={() => (editingActivityId = null)}
-                />
+                >
+                  <!-- Correct a mis-tagged participant without having to delete
+                       and re-log the whole activity. -->
+                  {#if (activity.expand?.contacts ?? []).length}
+                    <div class="border-t border-neutral-100 dark:border-neutral-800 pt-3">
+                      <span class="label">Roles</span>
+                      <div class="space-y-1.5">
+                        {#each activity.expand?.contacts ?? [] as person (person.id)}
+                          <div class="flex items-center justify-between gap-3">
+                            <span class="text-xs text-neutral-700 dark:text-neutral-300 truncate">
+                              {contactLabel(person)}{#if person.id === id}<span class="text-neutral-400 dark:text-neutral-500"> (this contact)</span>{/if}
+                            </span>
+                            <select
+                              value={editRoles[person.id] ?? ''}
+                              on:change={(e) => setEditRole(person.id, e.currentTarget.value)}
+                              aria-label="Role for {contactLabel(person)}"
+                              class="input w-auto min-w-36 text-xs py-1 shrink-0"
+                            >
+                              <option value="">Not recorded</option>
+                              {#each PARTICIPANT_ROLES as r (r.value)}
+                                <option value={r.value}>{r.label}</option>
+                              {/each}
+                            </select>
+                          </div>
+                        {/each}
+                      </div>
+                    </div>
+                  {/if}
+                </ActivityForm>
               {:else}
-              <div class="card px-4 py-3.5 flex items-start gap-3 group animate-fade-in {activity.deleted_at ? 'opacity-50' : ''}">
-                <div class="w-1.5 h-1.5 rounded-full {activity.deleted_at ? 'bg-red-400' : 'bg-accent dark:bg-accent-dark'} mt-2 shrink-0"></div>
+              <!-- Deleted activities are filtered out server-side, so there is no
+                   struck-through state to render here. -->
+              <div class="card px-4 py-3.5 flex items-start gap-3 group animate-fade-in">
+                <div class="w-1.5 h-1.5 rounded-full bg-accent dark:bg-accent-dark mt-2 shrink-0"></div>
                 <div class="flex-1 min-w-0">
                   <div class="flex items-start justify-between gap-2">
-                    <p class="text-sm font-medium text-neutral-900 dark:text-neutral-100 {activity.deleted_at ? 'line-through' : ''}">
+                    <p class="text-sm font-medium text-neutral-900 dark:text-neutral-100">
                       {getActivityLabel(activity.activity_type)}
+                      <!-- This contact's own part, when it was recorded. -->
+                      {#if roleLabel(activity, id)}
+                        <span class="badge-green ml-1 font-medium">{roleLabel(activity, id)}</span>
+                      {/if}
                     </p>
                     <div class="flex items-center gap-1 shrink-0">
                       {#if canEditActivity(activity)}
-                        <button on:click={() => (editingActivityId = activity.id)} class="btn-ghost p-1 text-neutral-400 hover:text-accent dark:hover:text-accent-dark" title="Edit activity" aria-label="Edit activity">
+                        <button on:click={() => openActivityEdit(activity)} class="btn-ghost p-1 text-neutral-400 hover:text-accent dark:hover:text-accent-dark" title="Edit activity" aria-label="Edit activity">
                           <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"/></svg>
+                        </button>
+                        <button on:click={() => deleteActivity(activity)} class="btn-ghost p-1 text-neutral-400 hover:text-red-500" title="Delete activity" aria-label="Delete activity">
+                          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/></svg>
                         </button>
                       {/if}
                       <span class="text-xs text-neutral-400 dark:text-neutral-500">{formatDate(activity.date)}</span>
@@ -709,65 +887,88 @@
                   {#if activity.notes}
                     <RichText value={activity.notes} extraClass="text-xs text-neutral-600 dark:text-neutral-400 mt-1" />
                   {/if}
+                  <!-- Shared activities (issue #6) name the other participants,
+                       so it's clear this entry isn't only about this contact. -->
+                  {#if others(activity).length}
+                    <p class="text-[11px] text-neutral-500 dark:text-neutral-400 mt-1.5 flex flex-wrap items-center gap-x-1.5">
+                      <span class="text-neutral-400 dark:text-neutral-500">with</span>
+                      <!-- Names only here: this contact's own role is the badge
+                           above, and repeating everyone else's made the line noisy.
+                           Roles for all participants show in the activity feed. -->
+                      {#each others(activity) as person, i (person.id)}
+                        <span><a href="{base}/contacts/{person.id}" class="hover:text-accent dark:hover:text-accent-dark hover:underline">{contactLabel(person)}</a>{#if i < others(activity).length - 1}<span class="text-neutral-400">,</span>{/if}</span>
+                      {/each}
+                    </p>
+                  {/if}
                   <p class="text-[11px] text-neutral-400 dark:text-neutral-500 mt-1.5">
                     by {activity.expand?.logged_by?.name || activity.expand?.logged_by?.email || 'Unknown'}
-                    {#if activity.deleted_at}
-                      · <span class="text-red-400">deleted {formatDate(activity.deleted_at)}</span>
-                    {:else if wasEdited(activity)}
+                    {#if wasEdited(activity)}
                       · edited {formatDate(activity.updated)}
                     {/if}
                   </p>
-                  {#if !activity.deleted_at}
-                    <div class="mt-2">
-                      <Reactions activityId={activity.id} reactions={reactionsByActivity[activity.id] ?? []} />
-                    </div>
+                  <div class="mt-2">
+                    <Reactions activityId={activity.id} reactions={reactionsByActivity[activity.id] ?? []} />
+                  </div>
 
-                    <!-- Reminder history (fired) -->
-                    {#each sentRems as sr (sr.id)}
-                      <p class="text-[11px] text-neutral-400 dark:text-neutral-500 mt-1.5 flex items-center gap-1">
-                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>
-                        Reminded {formatIST(sr.remind_at)} IST
+                  <!-- Reminder history (fired) -->
+                  {#each sentRems as sr (sr.id)}
+                    <p class="text-[11px] text-neutral-400 dark:text-neutral-500 mt-1.5 flex items-center gap-1">
+                      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>
+                      Reminded {formatIST(sr.remind_at)} IST
+                    </p>
+                  {/each}
+
+                  <!-- Reminder: inline editor / pending chip / add affordance (personal) -->
+                  {#if editingReminderFor === activity.id}
+                    <div class="mt-2 rounded-lg border border-accent/40 dark:border-accent-dark/40 p-3 space-y-3 animate-fade-in">
+                      <p class="text-xs font-medium text-neutral-700 dark:text-neutral-300 flex items-center gap-1.5">
+                        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9"/><path d="M10.3 21a1.94 1.94 0 0 0 3.4 0"/></svg>
+                        {remEditingId ? 'Edit reminder' : 'Follow-up reminder'}
                       </p>
-                    {/each}
-
-                    <!-- Reminder: inline editor / pending chip / add affordance (personal) -->
-                    {#if editingReminderFor === activity.id}
-                      <div class="mt-2 rounded-lg border border-accent/40 dark:border-accent-dark/40 p-3 space-y-3 animate-fade-in">
-                        <p class="text-xs font-medium text-neutral-700 dark:text-neutral-300 flex items-center gap-1.5">
-                          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9"/><path d="M10.3 21a1.94 1.94 0 0 0 3.4 0"/></svg>
-                          {remEditingId ? 'Edit reminder' : 'Follow-up reminder'}
-                        </p>
-                        <p class="text-[11px] text-neutral-500 dark:text-neutral-400 -mt-1.5">Linked to this activity — its context is included in the email. Defaults to 10 AM IST.</p>
-                        <ReminderFields bind:date={remDate} bind:time={remTime} bind:notify={remTo} {users} currentUserId={$currentUser?.id ?? ''} minDate={todayStr} idPrefix={`rem-${activity.id}`} />
-                        <div class="flex items-center gap-2 pt-0.5">
-                          <button on:click={saveActivityReminder} disabled={remSaving || !remDate} class="btn-primary text-xs py-1.5">Save</button>
-                          <button on:click={() => (editingReminderFor = null)} class="btn-secondary text-xs py-1.5">Cancel</button>
-                        </div>
+                      <p class="text-[11px] text-neutral-500 dark:text-neutral-400 -mt-1.5">Linked to this activity — its context is included in the email. Defaults to 10 AM IST.</p>
+                      <ReminderFields
+                        bind:date={remDate}
+                        bind:time={remTime}
+                        bind:notify={remTo}
+                        bind:cc={remCc}
+                        bind:ccEmails={remCcEmails}
+                        bind:invalid={remInvalid}
+                        {users}
+                        currentUserId={$currentUser?.id ?? ''}
+                        minDate={todayStr}
+                        idPrefix={`rem-${activity.id}`}
+                      />
+                      <div class="flex items-center gap-2 pt-0.5">
+                        <button on:click={saveActivityReminder} disabled={remSaving || !remDate || remInvalid} class="btn-primary text-xs py-1.5">Save</button>
+                        <button on:click={() => (editingReminderFor = null)} class="btn-secondary text-xs py-1.5">Cancel</button>
                       </div>
-                    {:else if pendingRem}
-                      <div class="mt-2 flex items-center flex-wrap gap-x-2 gap-y-1">
-                        <span class="inline-flex items-center gap-1.5 px-2 py-1 rounded-full text-[11px] font-medium bg-accent/10 dark:bg-accent-dark/15 text-accent dark:text-accent-dark">
-                          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9"/><path d="M10.3 21a1.94 1.94 0 0 0 3.4 0"/></svg>
-                          Follow up {formatIST(pendingRem.remind_at)} IST
-                        </span>
-                        {#if pendingRem.notify !== $currentUser?.id}
-                          <span class="text-[11px] text-neutral-400 dark:text-neutral-500">notifies {pendingRem.expand?.notify?.name || pendingRem.expand?.notify?.email}</span>
-                        {/if}
-                        {#if pendingRem.created_by === $currentUser?.id && canLogActivity}
-                          <button on:click={() => openReminderEditor(activity.id, pendingRem)} class="btn-ghost p-1 text-neutral-400 hover:text-accent dark:hover:text-accent-dark" title="Edit reminder">
-                            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"/></svg>
-                          </button>
-                          <button on:click={() => deleteReminder(pendingRem)} class="btn-ghost p-1 text-neutral-400 hover:text-red-500" title="Remove reminder">
-                            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/></svg>
-                          </button>
-                        {/if}
-                      </div>
-                    {:else if canLogActivity}
-                      <button on:click={() => openReminderEditor(activity.id)} class="mt-2 inline-flex items-center gap-1.5 text-[11px] font-medium text-neutral-500 dark:text-neutral-400 hover:text-accent dark:hover:text-accent-dark transition-colors">
+                    </div>
+                  {:else if pendingRem}
+                    <div class="mt-2 flex items-center flex-wrap gap-x-2 gap-y-1">
+                      <span class="inline-flex items-center gap-1.5 px-2 py-1 rounded-full text-[11px] font-medium bg-accent/10 dark:bg-accent-dark/15 text-accent dark:text-accent-dark">
                         <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9"/><path d="M10.3 21a1.94 1.94 0 0 0 3.4 0"/></svg>
-                        Add follow-up reminder
-                      </button>
-                    {/if}
+                        Follow up {formatIST(pendingRem.remind_at)} IST
+                      </span>
+                      {#if pendingRem.notify !== $currentUser?.id}
+                        <span class="text-[11px] text-neutral-400 dark:text-neutral-500">notifies {pendingRem.expand?.notify?.name || pendingRem.expand?.notify?.email}</span>
+                      {/if}
+                      {#if ccLabel(pendingRem)}
+                        <span class="text-[11px] text-neutral-400 dark:text-neutral-500">cc {ccLabel(pendingRem)}</span>
+                      {/if}
+                      {#if pendingRem.created_by === $currentUser?.id && canLogActivity}
+                        <button on:click={() => openReminderEditor(activity.id, pendingRem)} class="btn-ghost p-1 text-neutral-400 hover:text-accent dark:hover:text-accent-dark" title="Edit reminder">
+                          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"/></svg>
+                        </button>
+                        <button on:click={() => deleteReminder(pendingRem)} class="btn-ghost p-1 text-neutral-400 hover:text-red-500" title="Remove reminder">
+                          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/></svg>
+                        </button>
+                      {/if}
+                    </div>
+                  {:else if canLogActivity}
+                    <button on:click={() => openReminderEditor(activity.id)} class="mt-2 inline-flex items-center gap-1.5 text-[11px] font-medium text-neutral-500 dark:text-neutral-400 hover:text-accent dark:hover:text-accent-dark transition-colors">
+                      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9"/><path d="M10.3 21a1.94 1.94 0 0 0 3.4 0"/></svg>
+                      Add follow-up reminder
+                    </button>
                   {/if}
                 </div>
               </div>

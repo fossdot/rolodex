@@ -8,6 +8,8 @@
   import Avatar from '$lib/components/Avatar.svelte';
   import Reactions from '$lib/components/Reactions.svelte';
   import RichText from '$lib/components/RichText.svelte';
+  import { contactLabel } from '$lib/org';
+  import { participantLabel, participantLine } from '$lib/activity';
 
   type Period = 'week' | 'month' | 'quarter' | 'year' | 'all' | 'custom';
   let period: Period = 'month';
@@ -73,7 +75,9 @@
       if (isAdmin && filterUser) filters.push(`logged_by = '${filterUser}'`);
       if (search.trim()) {
         const q = search.trim().replace(/\\/g, '\\\\').replace(/'/g, "\\'");
-        filters.push(`(event_name ~ '${q}' || notes ~ '${q}' || contact.name ~ '${q}' || contact.org ~ '${q}')`);
+        // contact.orgs is a multi-relation two hops out, so `?~` is what matches
+        // when ANY of the contact's organisations contains the query.
+        filters.push(`(event_name ~ '${q}' || notes ~ '${q}' || contacts.name ?~ '${q}' || contacts.orgs.name ?~ '${q}')`);
       }
 
       // getFullList pages through every match so the count, the month grouping,
@@ -82,7 +86,9 @@
       const items = await pb.collection('activities').getFullList<Activity>({
         filter: filters.join(' && '),
         sort: '-date,-created',
-        expand: 'contact,logged_by',
+        // contact.orgs is a nested expand — the contact's organisation names are
+        // needed to label a row when the contact has no personal name.
+        expand: 'contacts.orgs,logged_by',
         batch: 200,
       });
       if (seq !== loadSeq) return; // a newer load superseded this one
@@ -157,14 +163,15 @@
     expandedId = expandedId === id ? null : id;
   }
 
-  // Active contacts: rank contacts by number of activities in the loaded window
+  // Active contacts: rank contacts by number of activities in the loaded window.
+  // An activity involving several people counts once for each of them.
   $: activeContacts = Object.values(
     activities.reduce<Record<string, { contact: Contact; count: number; lastDate: string }>>((acc, a) => {
-      const c = a.expand?.contact;
-      if (!c) return acc;
-      if (!acc[c.id]) acc[c.id] = { contact: c, count: 0, lastDate: '' };
-      acc[c.id].count += 1;
-      if (a.date > acc[c.id].lastDate) acc[c.id].lastDate = a.date;
+      for (const c of a.expand?.contacts ?? []) {
+        if (!acc[c.id]) acc[c.id] = { contact: c, count: 0, lastDate: '' };
+        acc[c.id].count += 1;
+        if (a.date > acc[c.id].lastDate) acc[c.id].lastDate = a.date;
+      }
       return acc;
     }, {})
   ).sort((a, b) => b.count - a.count);
@@ -296,9 +303,14 @@
                       <div class="flex items-start justify-between gap-2">
                         <p class="text-sm font-medium text-neutral-900 dark:text-neutral-100">
                           {getActivityLabel(act.activity_type)}
-                          {#if act.expand?.contact}
+                          {#if act.expand?.contacts?.length}
                             <span class="text-neutral-400 dark:text-neutral-500 font-normal">·</span>
-                            <span class="text-accent dark:text-accent-dark font-normal">{act.expand.contact.name || act.expand.contact.org || 'Unknown'}</span>
+                            <!-- Name the first two, then count the rest, so a
+                                 20-attendee activity still fits one line. -->
+<!-- Names carry their role, so the feed reads "Dev Kumar (Sponsor)". -->
+                            <span class="text-accent dark:text-accent-dark font-normal">
+                              {participantLine(act, 2)}
+                            </span>
                           {/if}
                         </p>
                         <span class="text-xs text-neutral-400 dark:text-neutral-500 shrink-0 flex items-center gap-1.5">
@@ -336,14 +348,15 @@
                               Event link
                             </a>
                           {/if}
-                          {#if act.expand?.contact}
-                            <a href="{base}/contacts/{act.contact}" class="flex items-center gap-1.5 text-neutral-600 dark:text-neutral-400 hover:text-accent dark:hover:text-accent-dark">
+                          <!-- Every participant is linked here, not just the first. -->
+                          {#each act.expand?.contacts ?? [] as person (person.id)}
+                            <a href="{base}/contacts/{person.id}" class="flex items-center gap-1.5 text-neutral-600 dark:text-neutral-400 hover:text-accent dark:hover:text-accent-dark">
                               <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                                 <path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/>
                               </svg>
-                              View contact
+                              {participantLabel(act, person)}
                             </a>
-                          {/if}
+                          {/each}
                           <span class="text-neutral-400 dark:text-neutral-500">
                             logged by {act.expand?.logged_by?.name || act.expand?.logged_by?.email || 'Unknown'}
                           </span>
@@ -375,10 +388,10 @@
               <span class="text-sm font-mono font-medium text-neutral-400 dark:text-neutral-500 w-5 text-right shrink-0">
                 {i + 1}
               </span>
-              <Avatar name={entry.contact.name || entry.contact.org || '?'} size="sm" />
+              <Avatar name={contactLabel(entry.contact)} size="sm" />
               <div class="flex-1 min-w-0">
                 <p class="text-sm font-medium text-neutral-900 dark:text-neutral-100 truncate group-hover:text-accent dark:group-hover:text-accent-dark transition-colors">
-                  {entry.contact.name || entry.contact.org || 'Unknown'}
+                  {contactLabel(entry.contact)}
                 </p>
                 <p class="text-xs text-neutral-400 dark:text-neutral-500 truncate">
                   last active {formatDate(entry.lastDate)}

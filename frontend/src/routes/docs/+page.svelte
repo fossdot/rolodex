@@ -7,6 +7,7 @@
     ['navigation', 'Finding your way around'],
     ['contacts', 'Contacts'],
     ['import', 'Importing contacts'],
+    ['multiple-values', 'Entering several values'],
     ['activities', 'Activities'],
     ['reminders', 'Reach-out reminders'],
     ['organisations', 'Organisations'],
@@ -57,6 +58,7 @@
         <ul>
           <li><strong>My Contacts</strong> — the contacts you added.</li>
           <li><strong>Rolodex</strong> — every contact in the network (the whole team's).</li>
+          <li><strong>Log Activity</strong> — log one interaction covering everyone who was involved.</li>
           <li><strong>Organisations</strong> — contacts grouped by organisation.</li>
           <li><strong>Activities</strong> — a feed of all logged interactions, with time filters.</li>
           <li><strong>Admin</strong> — a team dashboard (admins only).</li>
@@ -100,8 +102,64 @@
         </p>
         <ul>
           <li><strong>Required per row:</strong> a Name or Organisation, an Email or Mobile, how you know them, and at least one role and one topic.</li>
-          <li><strong>Multiple values:</strong> separate roles/topics with a pipe — e.g. <code>Speaker | Mentor</code>.</li>
+          <li><strong>Multiple values:</strong> separate them with a pipe — e.g. <code>Speaker | Mentor</code>, or <code>IIT Bombay | GNOME Foundation</code> in the <code>org</code> column.</li>
         </ul>
+      </section>
+
+      <section id="multiple-values">
+        <h2>Entering several values</h2>
+        <p>
+          A few fields hold more than one value, and they don't all work the same way. In short: in a CSV it's
+          always a pipe; in the app it's a comma or a pick-list.
+        </p>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr><th>Where</th><th>Field</th><th>How to add several</th></tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td>Contact form</td>
+                <td>Organisation</td>
+                <td>Type a name and press <kbd>Enter</kbd>, or pick a suggestion. Commas also work, so pasting <code>IIT Bombay, GNOME Foundation</code> adds both. Each gets its own row; the first is the primary.</td>
+              </tr>
+              <tr>
+                <td>Contact form</td>
+                <td>FOSS United roles · Topics</td>
+                <td>Tick as many boxes as apply.</td>
+              </tr>
+              <tr>
+                <td>Log Activity</td>
+                <td>Contacts involved</td>
+                <td>Search and pick each person. Not in the Rolodex yet? Choose <strong>“Add … as a new contact”</strong>. Each chip has its own role dropdown.</td>
+              </tr>
+              <tr>
+                <td>Contact form</td>
+                <td>Designation per organisation</td>
+                <td>One box per organisation row — fill in only the ones you know.</td>
+              </tr>
+              <tr>
+                <td>Reminder CC</td>
+                <td>Teammates</td>
+                <td>Tick as many as you like.</td>
+              </tr>
+              <tr>
+                <td>Reminder CC</td>
+                <td>Other addresses</td>
+                <td>Comma-separated — <code>team@fossunited.org, community@fossunited.org</code>.</td>
+              </tr>
+              <tr>
+                <td>CSV import</td>
+                <td><code>org</code> · <code>fu_roles</code> · <code>topics</code></td>
+                <td>Pipe-separated — <code>Speaker | Mentor</code>. A comma would be read as a new CSV column.</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        <p class="note">
+          Why the pipe in CSVs? Commas already separate columns there, so an organisation named
+          <code>Acme, Inc</code> would otherwise split into two.
+        </p>
       </section>
 
       <section id="activities">
@@ -111,23 +169,80 @@
           intro you made. They build a shared history of the relationship.
         </p>
         <h3>Logging an activity</h3>
+        <p>There are two ways in, and both write the same entry:</p>
+        <ul>
+          <li>
+            <strong>Log Activity</strong> in the sidebar — for anything involving more than one person. Search the
+            Rolodex and add everyone who was there, then fill in the activity once. One entry, shown on every
+            participant's timeline.
+          </li>
+          <li>
+            <strong>Log Activity</strong> on a contact's page — the quick path when it only concerns them.
+          </li>
+        </ul>
         <p>
-          On a contact, click <strong>Log Activity</strong>. Pick a type, add the event/context, a date, and notes.
-          You can attach a follow-up reminder at the same time. Anyone can log activities on any contact —
-          engagement is shared.
+          Either way: pick a type, add the event/context, a date, and notes, and optionally attach a follow-up
+          reminder at the same time. Anyone can log activities on any contact — engagement is shared.
+        </p>
+        <p>
+          Someone not in the Rolodex yet? Search for them in the contacts box and choose
+          <strong>“Add … as a new contact”</strong> — you can create them inline, without losing the activity
+          you're part-way through.
+        </p>
+        <p class="note">
+          A shared activity counts once for each person on it, so it shows on all their timelines and in each of
+          their activity counts.
+        </p>
+
+        <h3>Who did what</h3>
+        <p>
+          Each participant can carry a <strong>role</strong> for that activity — one person spoke, another
+          sponsored, a third volunteered. Pick it from the dropdown on their chip while logging (or from the
+          <strong>Their role</strong> box when logging against a single contact). It's optional; left blank,
+          nothing is recorded.
+        </p>
+        <p>Once set, the role shows up wherever the activity appears:</p>
+        <ul>
+          <li>On the contact's own timeline as a badge beside the activity — <span class="badge-green">Speaker</span></li>
+          <li>In the list of other participants on that activity — <em>with Dev Kumar, Rohit Desai</em></li>
+          <li>In the activity feed and on the organisation page — <em>Ananya Sharma (Speaker), Dev Kumar (Sponsor)</em></li>
+        </ul>
+        <p>
+          Tagged the wrong person? Open the activity's <strong>✎</strong> and change or clear any role there — no
+          need to delete and re-log.
+        </p>
+        <p class="note">
+          Roles are labels for context, not a filter: searching “sponsor” won't return every sponsor. The available
+          roles are Speaker, Organiser, Volunteer, Sponsor, Attendee, Mentor, Judge, Maintainer, Host and Other.
         </p>
         <h3>Fixing a mistake</h3>
         <p>
-          Made a typo or logged the wrong date? Click the <strong>✎</strong> on an activity to edit it. Only the
-          person who logged it — or an admin — can, and a corrected activity is marked <strong>edited</strong> so
-          the history stays honest.
+          Made a typo or logged the wrong date? Click the <strong>✎</strong> on an activity to edit it — including
+          who was involved, if you missed someone or added them by accident. Only the person who logged it — or an
+          admin — can, and a corrected activity is marked <strong>edited</strong> so the history stays honest.
+        </p>
+        <h3>Deleting an activity</h3>
+        <p>
+          Logged something twice, or in the wrong place? Click the <strong>🗑</strong> on an activity. It then
+          disappears from Rolodex <em>entirely</em> — for everyone, admins included. Only the person who logged it,
+          or an admin, can delete.
+        </p>
+        <p>
+          Nothing is actually erased: the record stays in the database with a note of who deleted it and when. If a
+          delete was a mistake, an admin can recover it from the PocketBase dashboard — it isn't undoable from
+          inside Rolodex.
+        </p>
+        <p class="note">
+          Deleting an activity also cancels any pending follow-up reminders on it, so nobody gets nudged about
+          something that no longer exists. (Contacts behave differently — a deleted <em>contact</em> is still
+          visible to admins and restorable in the app.)
         </p>
         <h3>Reactions &amp; the feed</h3>
         <ul>
           <li>React to any activity with an emoji, WhatsApp-style.</li>
           <li>The <strong>Activities</strong> page shows interactions across the whole network, filterable by <strong>this week / month / quarter / year</strong> or a custom range.</li>
         </ul>
-        <p class="note">Activities stay in the shared history — they can't be deleted, only edited (by whoever logged them, or an admin) to fix errors.</p>
+        <p class="note">Nothing is ever really erased — a deleted activity stays recoverable by an admin, so the shared history holds.</p>
       </section>
 
       <section id="reminders">
@@ -147,6 +262,16 @@
           Pick the <strong>date and time</strong> (IST — defaults to 10:00 AM) and who to <strong>notify</strong>
           (defaults to you). If a contact has no activities yet, log one first.
         </p>
+        <h3>Copying other people in</h3>
+        <p>
+          Expand <strong>Add CC</strong> to copy others on the email. Tick any teammates, and use
+          <strong>Other addresses</strong> for anyone outside Rolodex — a Google group, say, or a partner without
+          an account. Separate several with commas.
+        </p>
+        <p class="note">
+          CC is an emailed copy only: the reminder still belongs to its single assignee, so it stays in their bell
+          and not everyone else's.
+        </p>
         <h3>Where they show &amp; what's in the email</h3>
         <ul>
           <li>On the activity as a chip — <span class="badge-green">🔔 Follow up · date</span> — which flips to <span class="text-neutral-500 dark:text-neutral-400">✓ Reminded · date</span> after it fires.</li>
@@ -162,6 +287,38 @@
           The <strong>Organisations</strong> page groups contacts by their organisation, so you can see everyone
           you know at a given company or community in one place. Clicking an organisation name anywhere in the app
           takes you there.
+        </p>
+        <h3>A contact can belong to several</h3>
+        <p>
+          People wear more than one hat — someone might maintain a project, work somewhere else, and volunteer for
+          a FOSS United city chapter. Add as many organisations as apply on the contact form; they appear as chips
+          you can reorder or remove.
+        </p>
+        <p>
+          The <strong>first</strong> one is their <strong>primary</strong> organisation: it's what shows where
+          there's only room for one line — list rows, the activity feed, reminder emails. Their profile page lists
+          all of them, and the contact appears under <em>every</em> organisation they belong to.
+        </p>
+        <p>
+          Organisations are shared records, so start typing and pick the existing spelling rather than making a
+          near-duplicate. If it's genuinely new, choose <strong>Add “…”</strong> to create it. Renaming or removing
+          an organisation is admin-only, since it affects every contact linked to it.
+        </p>
+        <h3>A different title at each one</h3>
+        <p>
+          Every organisation row has its own optional <strong>designation</strong> box, because a title rarely
+          carries across — someone may be a Professor at one, a Maintainer at another, a Volunteer at a third.
+          Their profile then reads:
+        </p>
+        <p class="formula">IIT Bombay — Professor, CSE · GNOME Foundation — Maintainer · Zerodha</p>
+        <p>
+          The plain <strong>Designation</strong> field near the top stays their headline — one line, shown on its
+          own above the organisations. Per-org titles are optional; an organisation with none simply shows its name.
+          Changes are recorded in the contact's edit history.
+        </p>
+        <p class="note">
+          Importing by CSV? The <code>org</code> column takes several organisations separated by a pipe —
+          <code>IIT Bombay | GNOME Foundation</code> — the same way <code>fu_roles</code> and <code>topics</code> do.
         </p>
       </section>
 
@@ -293,6 +450,56 @@
     margin-top: 0.85rem;
   }
   :global(.dark) .doc :global(.note) { color: rgb(163 163 163); border-color: rgb(64 64 64); }
+
+  /* Wide tables scroll inside their own box rather than widening the page. */
+  .doc :global(.table-wrap) {
+    overflow-x: auto;
+    margin: 0.85rem 0;
+    border: 1px solid rgb(229 229 229);
+    border-radius: 0.5rem;
+  }
+  :global(.dark) .doc :global(.table-wrap) { border-color: rgb(38 38 38); }
+
+  .doc :global(table) {
+    width: 100%;
+    min-width: 34rem;
+    border-collapse: collapse;
+    font-size: 0.85rem;
+  }
+  .doc :global(th),
+  .doc :global(td) {
+    text-align: left;
+    vertical-align: top;
+    padding: 0.6rem 0.85rem;
+    border-bottom: 1px solid rgb(240 240 240);
+  }
+  .doc :global(tbody tr:last-child th),
+  .doc :global(tbody tr:last-child td) { border-bottom: 0; }
+  .doc :global(th) {
+    font-size: 0.7rem;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: rgb(115 115 115);
+    background: rgb(250 250 250);
+    white-space: nowrap;
+  }
+  .doc :global(td:nth-child(1)),
+  .doc :global(td:nth-child(2)) { white-space: nowrap; color: rgb(64 64 64); }
+  :global(.dark) .doc :global(th),
+  :global(.dark) .doc :global(td) { border-color: rgb(38 38 38); }
+  :global(.dark) .doc :global(th) { color: rgb(163 163 163); background: rgb(23 23 23); }
+  :global(.dark) .doc :global(td:nth-child(1)),
+  :global(.dark) .doc :global(td:nth-child(2)) { color: rgb(212 212 212); }
+
+  .doc :global(kbd) {
+    font-size: 0.7rem;
+    padding: 0.1rem 0.3rem;
+    border: 1px solid rgb(229 229 229);
+    border-radius: 0.25rem;
+    background: rgb(250 250 250);
+    font-family: ui-monospace, monospace;
+  }
+  :global(.dark) .doc :global(kbd) { border-color: rgb(64 64 64); background: rgb(38 38 38); }
 
   .doc :global(.formula) {
     font-weight: 600;

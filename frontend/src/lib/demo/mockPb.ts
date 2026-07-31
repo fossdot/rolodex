@@ -14,8 +14,11 @@ const REL_TARGET: Record<string, string> = {
   deleted_by: 'users',
   editor: 'users',
   user: 'users',
+  cc: 'users',
   contact: 'contacts',
+  contacts: 'contacts',
   activity: 'activities',
+  orgs: 'organisations',
 };
 
 // ── Filter evaluator ─────────────────────────────────────────────────────────
@@ -57,28 +60,50 @@ function tokenize(s: string): Tok[] {
 function resolvePath(rec: Rec, path: string, db: Db): unknown[] {
   const segs = path.split('.');
 
-  // back-relation: activities_via_contact.<field> on a contact
-  if (segs[0] === 'activities_via_contact') {
-    const related = (db.activities || []).filter((act) => act.contact === rec.id);
+  // Back-relation from a contact to its activities. PocketBase names it after
+  // the relation field, which is now the multi-valued `contacts`.
+  if (segs[0] === 'activities_via_contacts') {
+    const related = (db.activities || []).filter((act) =>
+      Array.isArray(act.contacts) && (act.contacts as string[]).includes(rec.id)
+    );
     const rest = segs.slice(1);
     if (!rest.length) return related;
-    return related.map((act) => resolveOne(act, rest, db));
+    return resolveList(related, rest, db);
   }
-  return [resolveOne(rec, segs, db)];
+  return resolveList([rec], segs, db);
 }
 
-function resolveOne(rec: Rec | undefined, segs: string[], db: Db): unknown {
-  let cur: unknown = rec;
+/**
+ * Walk a field path over a set of records, following relations as it goes.
+ *
+ * Resolution is list-based rather than single-valued because a hop can fan out:
+ * `orgs` on a contact is a multi-relation, so `orgs.name` yields every
+ * organisation name, and `contact.orgs.name` on an activity fans out one level
+ * further. A relation is only followed when more segments remain — the last
+ * segment must return the raw ids so `added_by = '<id>'` still works.
+ */
+function resolveList(start: unknown[], segs: string[], db: Db): unknown[] {
+  let cur: unknown[] = start;
   for (let k = 0; k < segs.length; k++) {
-    if (cur == null || typeof cur !== 'object') return undefined;
     const seg = segs[k];
-    const val = (cur as Rec)[seg];
-    // follow a relation id to the target record for the remaining segments
-    if (k < segs.length - 1 && REL_TARGET[seg] && typeof val === 'string') {
-      cur = (db[REL_TARGET[seg]] || []).find((r) => r.id === val);
-    } else {
-      cur = val;
+    const isLast = k === segs.length - 1;
+    const next: unknown[] = [];
+    for (const item of cur) {
+      if (item == null || typeof item !== 'object') continue;
+      const val = (item as Rec)[seg];
+      if (!isLast && REL_TARGET[seg]) {
+        const ids = Array.isArray(val) ? val : typeof val === 'string' && val ? [val] : [];
+        for (const id of ids) {
+          const found = (db[REL_TARGET[seg]] || []).find((r) => r.id === id);
+          if (found) next.push(found);
+        }
+      } else if (Array.isArray(val)) {
+        next.push(...val);
+      } else {
+        next.push(val);
+      }
     }
+    cur = next;
   }
   return cur;
 }
@@ -194,13 +219,29 @@ function withExpand(rec: Rec, expand: string | undefined, db: Db): Rec {
   if (!expand) return { ...rec };
   const out: Rec = { ...rec };
   const exp: Record<string, unknown> = {};
-  for (const field of expand.split(',').map((s) => s.trim()).filter(Boolean)) {
-    const target = REL_TARGET[field];
+  for (const path of expand.split(',').map((s) => s.trim()).filter(Boolean)) {
+    // Dotted paths expand through a relation ("contact.orgs" puts the contact
+    // under .expand.contact and its organisations under
+    // .expand.contact.expand.orgs), matching PocketBase's shape.
+    const [head, ...rest] = path.split('.');
+    const target = REL_TARGET[head];
     if (!target) continue;
-    const id = rec[field];
-    if (typeof id === 'string' && id) {
+    const nested = rest.join('.') || undefined;
+
+    const grab = (id: string): Rec | null => {
       const found = (db[target] || []).find((r) => r.id === id);
-      if (found) exp[field] = { ...found };
+      return found ? withExpand(found, nested, db) : null;
+    };
+
+    const id = rec[head];
+    // Multi-value relations (contacts.orgs, reminders.cc) expand to an array,
+    // exactly as PocketBase does; single relations to one record.
+    if (Array.isArray(id)) {
+      const found = id.map((v) => grab(String(v))).filter((r): r is Rec => !!r);
+      if (found.length) exp[head] = found;
+    } else if (typeof id === 'string' && id) {
+      const found = grab(id);
+      if (found) exp[head] = found;
     }
   }
   out.expand = exp;
@@ -219,7 +260,24 @@ function formToObject(data: unknown): Rec {
       const all = data.getAll(key);
       // multi-value fields (fu_roles, topics) come back as arrays; files dropped
       const vals = all.filter((v) => typeof v === 'string');
-      obj[key] = (key === 'fu_roles' || key === 'topics') ? vals : (vals[vals.length - 1] ?? '');
+      // Multi-value fields keep every entry; `orgs` sends '' to mean "clear".
+      const MULTI = key === 'fu_roles' || key === 'topics' || key === 'orgs';
+      if (MULTI) {
+        obj[key] = vals.filter((v) => v !== '');
+        continue;
+      }
+      const raw = vals[vals.length - 1] ?? '';
+      // json fields travel as a JSON string over multipart; store the object so
+      // the demo behaves like the real backend.
+      if (key === 'org_designations' || key === 'contact_roles') {
+        try {
+          obj[key] = raw ? JSON.parse(raw) : {};
+        } catch {
+          obj[key] = {};
+        }
+        continue;
+      }
+      obj[key] = raw;
     }
     return obj as Rec;
   }

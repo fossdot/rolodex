@@ -4,6 +4,7 @@
   import { currentUser, toasts } from '$lib/stores';
   import { FU_ROLES, TOPICS, normalizeCity } from '$lib/constants';
   import { parseCsvObjects, toCsv } from '$lib/csv';
+  import { loadOrganisations, resolveOrgIds } from '$lib/org';
 
   // CSV column order for both the template and parsing. Header names match the
   // contact fields exactly so the file is self-documenting.
@@ -129,6 +130,11 @@
   type ParsedRow = {
     line: number;
     payload: Record<string, unknown>;
+    /**
+     * Organisation *names* from the row. Held apart from the payload because
+     * they become relation ids only at import time, once for the whole file.
+     */
+    orgs: string[];
     display: { name: string; org: string; contact: string };
     errors: RowError[];
   };
@@ -160,14 +166,21 @@
   function validateRow(o: Record<string, string>, line: number): ParsedRow {
     const errors: RowError[] = [];
     const name = (o.name ?? '').trim();
-    const org = (o.org ?? '').trim();
+    // A contact can belong to several organisations — pipe-separated, the same
+    // convention the fu_roles and topics columns already use.
+    const orgs = [
+      ...new Map(
+        (o.org ?? '').split('|').map((s) => s.trim()).filter(Boolean).map((s) => [s.toLowerCase(), s])
+      ).values(),
+    ];
+    const org = orgs.join(' | ');
     const email = (o.email ?? '').trim();
     const secondary_email = (o.secondary_email ?? '').trim();
     const mobile = (o.mobile ?? '').trim();
     const how_you_know = (o.how_you_know ?? '').trim();
 
-    if (!name && !org)
-      errors.push({ message: 'Missing name and organisation', fix: 'Fill the “name” or the “org” column (at least one).' });
+    if (!name && !orgs.length)
+      errors.push({ message: 'Missing name and organisation', fix: 'Fill the “name” or the “org” column (at least one). Separate multiple organisations with a pipe: “IIT Bombay | GNOME Foundation”.' });
     if (!email && !mobile)
       errors.push({ message: 'Missing email and mobile', fix: 'Fill the “email” or the “mobile” column (at least one).' });
     if (email && !EMAIL_RE.test(email))
@@ -199,9 +212,10 @@
     return {
       line,
       errors,
+      orgs,
       display: { name, org, contact: email || mobile },
       payload: {
-        name, org,
+        name,
         designation: (o.designation ?? '').trim(),
         city: normalizeCity(o.city ?? ''),
         country: (o.country ?? '').trim() || 'India',
@@ -276,9 +290,27 @@
     if (!validRows.length || importing) return;
     importing = true;
     resetResults();
+
+    // Resolve every organisation named anywhere in the file in one pass, so a
+    // 500-row import doesn't do a lookup-or-create per row. Names are matched
+    // case-insensitively, so two rows spelling an org differently still land on
+    // the same organisation.
+    let orgIdByName = new Map<string, string>();
+    try {
+      const roster = await loadOrganisations();
+      const allNames = [...new Set(validRows.flatMap((r) => r.orgs))];
+      await resolveOrgIds(allNames, roster);
+      orgIdByName = new Map((await loadOrganisations()).map((o) => [o.name.toLowerCase(), o.id]));
+    } catch {
+      importing = false;
+      toasts.error('Could not prepare organisations. Nothing was imported — please try again.');
+      return;
+    }
+
     for (const row of validRows) {
       try {
-        await pb.collection('contacts').create(row.payload);
+        const orgIds = row.orgs.map((n) => orgIdByName.get(n.toLowerCase())).filter(Boolean);
+        await pb.collection('contacts').create({ ...row.payload, orgs: orgIds });
         importedCount += 1;
       } catch (e: unknown) {
         const msg = (e as { response?: { message?: string } })?.response?.message;

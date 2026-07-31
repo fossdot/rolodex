@@ -10,6 +10,17 @@
 //   …restart PocketBase so the new migrations apply…
 //   node pocketbase/rehearse-upgrade.mjs after   <url> <superuser-email> <password>
 //
+// IMPORTANT when the copy lives outside the repo (e.g. --dir /tmp/rehearsal):
+// PocketBase resolves --migrationsDir relative to the DATA directory, not the
+// executable, so omitting the flag looks for /tmp/pb_migrations and silently
+// applies nothing. Pass it explicitly on the migrating restart:
+//
+//   pocketbase serve --dir /tmp/rehearsal \
+//     --migrationsDir /opt/rolodex/pocketbase/pb_migrations --http 127.0.0.1:8095
+//
+// The giveaway that it did not apply is `organisations: absent` in the "after"
+// output, plus every activity reported as having a mis-mapped contact.
+//
 // The snapshot is written to pocketbase/.rehearsal-snapshot.json (gitignored).
 //
 // Fields listed in EXPECTED_REMOVED / EXPECTED_ADDED are the ones a migration is

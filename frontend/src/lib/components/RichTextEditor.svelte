@@ -57,23 +57,49 @@
   }
 
   function manualOutdent(li: HTMLLIElement) {
-    const innerList = li.parentElement;   // the <ul>/<ol> li currently lives in
+    const innerList = li.parentElement;  
     if (!innerList) return;
-    const outerList = innerList.parentElement; // one level up
+    const outerList = innerList.parentElement;
     if (!outerList) return;
 
-    // Move li to sit right after its current wrapping list, one level up.
     outerList.insertBefore(li, innerList.nextSibling);
 
-    // If that inner list has no items left, remove the now-empty wrapper.
     if (!innerList.querySelector('li')) {
       innerList.remove();
     }
-
-    // Caret goes to the start of li in its new spot - deterministic, since
-    // we moved the node ourselves instead of asking execCommand to.
     const range = document.createRange();
     range.selectNodeContents(li);
+    range.collapse(true);
+    const sel = window.getSelection();
+    sel?.removeAllRanges();
+    sel?.addRange(range);
+
+    sync();
+  }
+
+  function exitList(li: HTMLLIElement) {
+    const list = li.parentElement; 
+    if (!list) return;
+
+    const line = document.createElement('div');
+    line.innerHTML = '<br>';
+
+    const tail = document.createElement(list.tagName);
+    let sib = li.nextElementSibling;
+    while (sib) {
+      const next = sib.nextElementSibling;
+      tail.appendChild(sib);
+      sib = next;
+    }
+
+    list.after(line);
+    if (tail.children.length) line.after(tail);
+
+    li.remove();
+    if (!list.children.length) list.remove();
+
+    const range = document.createRange();
+    range.selectNodeContents(line);
     range.collapse(true);
     const sel = window.getSelection();
     sel?.removeAllRanges();
@@ -85,10 +111,19 @@
   function handleBackspace(e: KeyboardEvent) {
     const li = getCaretListItem();
     if (!li || !isCaretAtStartOf(li)) return;
-    if (listDepth(li) <= 1) return; // depth 1 = top-level, nothing to outdent
 
-    e.preventDefault();
-    manualOutdent(li);
+    const depth = listDepth(li);
+
+    if (depth > 1) {
+      e.preventDefault();
+      manualOutdent(li);
+      return;
+    }
+
+    if (depth === 1 && !li.textContent?.trim()) {
+      e.preventDefault();
+      exitList(li);
+    }
   }
 
   function handleKeydown(e: KeyboardEvent) {

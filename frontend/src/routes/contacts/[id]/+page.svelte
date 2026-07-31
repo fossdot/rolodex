@@ -29,14 +29,20 @@
   // Participant roles being edited, keyed by contact id. Seeded from the record
   // each time the editor opens so a cancelled edit leaves nothing behind.
   let editRoles: Record<string, string> = {};
+  // Only the dropdowns the user actually touched. Saving asserts nothing about
+  // the rest, so a role set by someone else while this form was open survives —
+  // "I didn't change it" must not mean "clear it".
+  let editRoleTouched = new Set<string>();
 
   function openActivityEdit(activity: Activity) {
     editRoles = { ...(activity.contact_roles ?? {}) };
+    editRoleTouched = new Set();
     editingActivityId = activity.id;
   }
 
   // Reassign rather than mutate, so the change is picked up.
   function setEditRole(contactId: string, role: string) {
+    editRoleTouched = new Set(editRoleTouched).add(contactId);
     if (role) editRoles = { ...editRoles, [contactId]: role };
     else {
       const { [contactId]: _cleared, ...rest } = editRoles;
@@ -320,6 +326,16 @@
     try {
       // contact / logged_by / deleted_* are intentionally omitted — they are
       // immutable and re-pinned server-side on update.
+      // PocketBase replaces a json field wholesale, so sending this form's map
+      // as-is would wipe a role another user set after the form was opened.
+      // Re-read, then apply our changes only to the participants we displayed.
+      const fresh = await pb.collection('activities').getOne<Activity>(activityId);
+      const mergedRoles: Record<string, string> = { ...(fresh.contact_roles ?? {}) };
+      for (const cid of editRoleTouched) {
+        if (editRoles[cid]) mergedRoles[cid] = editRoles[cid];
+        else delete mergedRoles[cid];
+      }
+
       await pb.collection('activities').update(activityId, {
         activity_type: d.activity_type,
         event_name: d.event_name,
@@ -328,7 +344,7 @@
         notes: d.notes,
         // Correcting who did what is part of editing an activity. The server
         // prunes roles for anyone no longer on it.
-        contact_roles: editRoles,
+        contact_roles: mergedRoles,
       });
       const expanded = await pb.collection('activities').getOne<Activity>(activityId, { expand: 'logged_by,contacts' });
       activities = activities.map((a) => (a.id === activityId ? expanded : a));

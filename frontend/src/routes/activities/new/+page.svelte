@@ -7,7 +7,6 @@
   // The per-contact "Log Activity" button on a contact page still exists for the
   // one-person case; both write the same `activities` row shape.
   import { base } from '$app/paths';
-  import { onMount } from 'svelte';
   import { goto } from '$app/navigation';
   import { pb } from '$lib/pb';
   import { currentUser, toasts } from '$lib/stores';
@@ -63,10 +62,6 @@
   $: if (!people.length) remindAbout = '';
 
   $: if (people.length) peopleError = '';
-
-  onMount(() => {
-    // Nothing to preload — the contact picker searches on demand.
-  });
 
   type ActivityDraft = {
     activity_type: string;

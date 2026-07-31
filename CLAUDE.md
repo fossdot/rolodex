@@ -34,12 +34,19 @@ Without the explicit `--migrationsDir`/`--hooksDir` the JS migrations and hooks 
 **Before deploying a migration**, rehearse it against a copy of production — `pocketbase/rehearse-upgrade.mjs` snapshots every record, and after the migrating restart it diffs the result and reports any lost row or unexpectedly changed field:
 
 ```bash
+mkdir -p /tmp/copy /tmp/no-migrations
 cp /path/to/prod/data.db /tmp/copy/data.db
-./pocketbase/pocketbase serve --dir /tmp/copy --http 127.0.0.1:8095   # old binary/branch
+
+# snapshot first — an empty --migrationsDir means nothing is applied yet
+pocketbase serve --dir /tmp/copy --migrationsDir /tmp/no-migrations --http 127.0.0.1:8095
 node pocketbase/rehearse-upgrade.mjs before http://127.0.0.1:8095 <su-email> <pw>
-# restart on the new branch so the pending migrations apply, then:
+
+# then the same data dir with the real migrations — pass the path EXPLICITLY
+pocketbase serve --dir /tmp/copy --migrationsDir "$PWD/pocketbase/pb_migrations" --http 127.0.0.1:8095
 node pocketbase/rehearse-upgrade.mjs after  http://127.0.0.1:8095 <su-email> <pw>
 ```
+
+`--migrationsDir` resolves relative to the **data** directory, not the executable. With `--dir /tmp/copy` it looks for `/tmp/pb_migrations` and silently applies nothing, so it must be passed explicitly whenever the copy lives outside the repo. (Production is unaffected: there `pb_data` and `pb_migrations` are siblings, so the default resolves correctly.) A rehearsal where the migration never ran shows up as `organisations: absent` in the "after" output.
 
 Fields a migration is *meant* to add or drop are listed in `EXPECTED_ADDED`/`EXPECTED_REMOVED` at the top of that script — extend them when you reshape a collection, or the rehearsal will report the intended change as drift. Crons can be fired on demand via `POST /api/crons/<id>` as a superuser. The frontend also ships a backend-less demo (`VITE_DEMO=1 npm run dev`) that auto-signs-in as an admin over the seed data in `lib/demo/`; `lib/demo/mockPb.ts` reimplements the slice of the SDK the app uses, so a new filter operator or expand shape may need adding there too.
 

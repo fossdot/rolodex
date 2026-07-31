@@ -309,10 +309,14 @@
           record, the new name applies to every contact linked to it in a single edit.
         </p>
         <p>
-          That's also how you merge two entries for the same place: rename one to exactly match the other and they
-          fold together, since organisation names are unique (case-insensitively). Useful for the
-          <code>Acme</code> / <code>Acme, Inc</code> pairs that accumulated while organisations were free text on
-          each contact.
+          Two entries for the same place — <code>Acme</code> and <code>Acme, Inc</code>, say — are combined with
+          <strong>Merge into another organisation</strong>, just under the heading. Pick the one to keep: every
+          contact filed under this organisation moves across (including any per-organisation designation), and the
+          empty one is removed.
+        </p>
+        <p class="note">
+          Renaming won't merge anything — organisation names are unique, so renaming onto one that already exists is
+          refused. Merge is the tool for that.
         </p>
         <h3>A different title at each one</h3>
         <p>

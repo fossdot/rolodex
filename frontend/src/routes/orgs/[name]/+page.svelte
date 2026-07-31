@@ -7,7 +7,7 @@
   import type { Contact, Activity, Organisation, User } from '$lib/types';
   import { ACTIVITY_TYPES } from '$lib/constants';
   import Avatar from '$lib/components/Avatar.svelte';
-  import { contactLabel } from '$lib/org';
+  import { contactLabel, loadOrganisations } from '$lib/org';
   import { participantLine } from '$lib/activity';
 
   $: orgName = decodeURIComponent($page.params.name ?? '');
@@ -34,6 +34,76 @@
     renaming = true;
   }
 
+  // ── Merging (admins only) ──────────────────────────────────────────────────
+  // Renaming cannot merge: names are uniquely indexed, so renaming onto an
+  // existing one is rejected. Merging instead re-points every contact — live and
+  // soft-deleted — at the target organisation, carries over any per-org
+  // designation the target does not already have, then deletes this one.
+  let merging = false;
+  let mergeTarget = '';
+  let mergeError = '';
+  let mergeSaving = false;
+  let mergeOptions: Organisation[] = [];
+
+  async function startMerge() {
+    mergeError = '';
+    mergeTarget = '';
+    try {
+      const all = await loadOrganisations();
+      mergeOptions = all.filter((o) => o.id !== org?.id);
+      merging = true;
+    } catch {
+      toasts.error('Could not load the organisation list');
+    }
+  }
+
+  async function doMerge() {
+    if (!org || !mergeTarget) return;
+    const target = mergeOptions.find((o) => o.id === mergeTarget);
+    if (!target) return;
+    if (!confirm(
+      `Merge “${org.name}” into “${target.name}”?\n\n` +
+      `Every contact filed under “${org.name}” moves to “${target.name}”, and “${org.name}” is removed. This cannot be undone from the app.`
+    )) return;
+
+    mergeSaving = true;
+    mergeError = '';
+    try {
+      // Soft-deleted contacts link to organisations too, so they must move as
+      // well or they would be left pointing at a deleted record.
+      const affected = await pb.collection('contacts').getFullList<Contact>({
+        filter: `orgs.id ?= '${org.id}'`,
+        batch: 200,
+      });
+
+      for (const c of affected) {
+        // Preserve order, swap this org for the target, drop a duplicate if the
+        // contact was already filed under both.
+        const next: string[] = [];
+        for (const id of c.orgs ?? []) {
+          const mapped = id === org.id ? target.id : id;
+          if (!next.includes(mapped)) next.push(mapped);
+        }
+        const designations = { ...(c.org_designations ?? {}) };
+        const carried = designations[org.id];
+        delete designations[org.id];
+        // Only fill the target's designation if it has none of its own.
+        if (carried && !designations[target.id]) designations[target.id] = carried;
+
+        await pb.collection('contacts').update(c.id, { orgs: next, org_designations: designations });
+      }
+
+      await pb.collection('organisations').delete(org.id);
+      toasts.success(`Merged into “${target.name}” — ${affected.length} ${affected.length === 1 ? 'contact' : 'contacts'} moved`);
+      await goto(`${base}/orgs/${encodeURIComponent(target.name)}`, { replaceState: true });
+    } catch (e: unknown) {
+      const msg = (e as { response?: { message?: string } })?.response?.message;
+      mergeError = msg || 'Could not merge these organisations.';
+    } finally {
+      mergeSaving = false;
+    }
+  }
+
   async function saveRename() {
     const next = draftName.trim();
     if (!org || !next || next === org.name) { renaming = false; return; }
@@ -49,7 +119,7 @@
       const msg = (e as { response?: { data?: Record<string, { message?: string }>; message?: string } })?.response;
       // The collection has a case-insensitive unique index on `name`.
       renameError = msg?.data?.name?.message
-        ? `An organisation called “${next}” already exists. To merge them, rename this one to match exactly and the duplicate is folded in.`
+        ? `“${next}” already exists — names must be unique. If they are the same organisation, use Merge below instead.`
         : (msg?.message || 'Could not rename this organisation.');
     } finally {
       renameSaving = false;
@@ -177,6 +247,42 @@
         <p class="text-sm text-neutral-500 dark:text-neutral-400 mt-0.5">
           {loading ? '—' : `${contacts.length} ${contacts.length === 1 ? 'contact' : 'contacts'} · ${activities.length} ${activities.length === 1 ? 'activity' : 'activities'}`}
         </p>
+      {/if}
+
+      <!-- Merging is separate from renaming because names are uniquely indexed:
+           renaming onto an existing organisation is rejected, not combined. -->
+      {#if canRename && org && !renaming}
+        {#if !merging}
+          <button
+            on:click={startMerge}
+            class="mt-1.5 inline-flex items-center gap-1.5 text-xs font-medium text-neutral-500 dark:text-neutral-400 hover:text-accent dark:hover:text-accent-dark transition-colors"
+          >
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M7 3v6a4 4 0 0 0 4 4h9"/><path d="m16 9 4 4-4 4"/></svg>
+            Merge into another organisation
+          </button>
+        {:else}
+          <div class="mt-2 rounded-lg border border-accent/40 dark:border-accent-dark/40 p-3 space-y-2 max-w-xl animate-fade-in">
+            <p class="text-xs font-medium text-neutral-700 dark:text-neutral-300">
+              Move everyone here into another organisation
+            </p>
+            <p class="text-[11px] text-neutral-500 dark:text-neutral-400">
+              All {contacts.length} {contacts.length === 1 ? 'contact' : 'contacts'} filed under “{orgName}” move across, and “{orgName}” is removed. Use this for duplicates like <em>Acme</em> and <em>Acme, Inc</em>.
+            </p>
+            <div class="flex flex-wrap items-center gap-2">
+              <select bind:value={mergeTarget} class="input w-auto min-w-56 text-sm">
+                <option value="">Choose an organisation…</option>
+                {#each mergeOptions as o (o.id)}
+                  <option value={o.id}>{o.name}</option>
+                {/each}
+              </select>
+              <button on:click={doMerge} disabled={mergeSaving || !mergeTarget} class="btn-primary text-sm py-1.5">
+                {mergeSaving ? 'Merging…' : 'Merge'}
+              </button>
+              <button on:click={() => (merging = false)} class="btn-secondary text-sm py-1.5">Cancel</button>
+            </div>
+            {#if mergeError}<p class="text-xs text-red-500">{mergeError}</p>{/if}
+          </div>
+        {/if}
       {/if}
     </div>
   </div>

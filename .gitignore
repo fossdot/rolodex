@@ -20,8 +20,11 @@ frontend/.env
 frontend/.env.local
 frontend/.env.*.local
 
-# Claude Code — may contain session credentials in allow lists
-.claude/
+# Claude Code — settings.local.json may contain session credentials in allow
+# lists, and worktrees are scratch space. Skills are shared tooling, so they are
+# the one thing under .claude/ that is versioned.
+.claude/*
+!.claude/skills/
 
 # OS
 .DS_Store

@@ -2,6 +2,19 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
+## Skills
+
+Four repo skills in `.claude/skills/` wrap the flows below, each of which has a step that is silently wrong when skipped. Prefer them over reconstructing the commands by hand:
+
+| Skill | Use for | The trap it avoids |
+|---|---|---|
+| `verify` | pre-merge check: typecheck, build, real-browser pass over demo mode | "it builds" is not a test; there is no test suite |
+| `rehearse` | proving a migration keeps existing data | a rehearsal where the migration never ran reports a clean pass |
+| `pb` | throwaway backend with real rules and hooks | omitting `--migrationsDir`/`--hooksDir` starts an empty server, no error |
+| `deploy` | releasing to the production VPS | a partial `npm run build` keeps serving the old bundle |
+
+`.claude/` is otherwise gitignored — `settings.local.json` and worktrees stay local; only `skills/` is versioned.
+
 ## Commands
 
 All frontend commands run from `frontend/`:

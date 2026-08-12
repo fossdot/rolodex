@@ -23,6 +23,136 @@
     value = el.innerHTML;
   }
 
+  const isList = (n: Element | null): boolean => n?.tagName === 'UL' || n?.tagName === 'OL';
+
+  function getCaretListItem(): HTMLLIElement | null {
+    const sel = window.getSelection();
+    const node = sel?.anchorNode;
+    if (!node) return null;
+    return (node instanceof Element ? node : node.parentElement)?.closest('li') ?? null;
+  }
+
+  // False whenever text is selected: Backspace must delete the selection then,
+  // not reinterpret the anchor as a caret and outdent instead.
+  function isCaretAtStartOf(li: HTMLLIElement): boolean {
+    const sel = window.getSelection();
+    if (!sel || !sel.anchorNode || !sel.isCollapsed) return false;
+    const range = document.createRange();
+    range.selectNodeContents(li);
+    range.setEnd(sel.anchorNode, sel.anchorOffset);
+    return range.toString().length === 0;
+  }
+
+  function handleTab(e: KeyboardEvent) {
+    if (!getCaretListItem()) return;
+    e.preventDefault();
+    exec(e.shiftKey ? 'outdent' : 'indent');
+  }
+
+  function listDepth(li: HTMLLIElement): number {
+    let depth = 0;
+    let node: Element | null = li.parentElement;
+    while (node && node !== el) {
+      if (node.tagName === 'UL' || node.tagName === 'OL') depth++;
+      node = node.parentElement;
+    }
+    return depth;
+  }
+
+  // Lift `li` out by one level. Two nesting shapes reach here: Chromium's
+  // execCommand puts the nested list next to the parent <li>, while pasted
+  // content (Docs, Word) puts it inside it. Both normalise to the former.
+  function manualOutdent(li: HTMLLIElement) {
+    const innerList = li.parentElement;
+    if (!innerList) return;
+    // Insert after the whole nested block — the parent <li> when the list hangs
+    // off it, otherwise the list itself.
+    const host = isList(innerList.parentElement) ? innerList : innerList.parentElement;
+    const outerList = host?.parentElement;
+    if (!host || !outerList) return;
+
+    // Items below `li` are carried along one level down, so the visible order
+    // never changes. A list directly after `li` already holds its children —
+    // reuse it as the tail rather than wrapping it into another level.
+    const next = li.nextElementSibling;
+    const tail = isList(next) ? (next as Element) : document.createElement(innerList.tagName);
+    let sib = tail === next ? tail.nextElementSibling : li.nextElementSibling;
+    while (sib) {
+      const after = sib.nextElementSibling;
+      tail.appendChild(sib);
+      sib = after;
+    }
+
+    outerList.insertBefore(li, host.nextSibling);
+    if (tail.children.length) li.after(tail);
+
+    if (!innerList.querySelector('li')) {
+      innerList.remove();
+    }
+    const range = document.createRange();
+    range.selectNodeContents(li);
+    range.collapse(true);
+    const sel = window.getSelection();
+    sel?.removeAllRanges();
+    sel?.addRange(range);
+
+    sync();
+  }
+
+  function exitList(li: HTMLLIElement) {
+    const list = li.parentElement;
+    if (!list) return;
+
+    const line = document.createElement('div');
+    line.innerHTML = '<br>';
+
+    const tail = document.createElement(list.tagName);
+    let sib = li.nextElementSibling;
+    while (sib) {
+      const next = sib.nextElementSibling;
+      tail.appendChild(sib);
+      sib = next;
+    }
+
+    list.after(line);
+    if (tail.children.length) line.after(tail);
+
+    li.remove();
+    if (!list.children.length) list.remove();
+
+    const range = document.createRange();
+    range.selectNodeContents(line);
+    range.collapse(true);
+    const sel = window.getSelection();
+    sel?.removeAllRanges();
+    sel?.addRange(range);
+
+    sync();
+  }
+
+  function handleBackspace(e: KeyboardEvent) {
+    const li = getCaretListItem();
+    if (!li || !isCaretAtStartOf(li)) return;
+
+    const depth = listDepth(li);
+
+    if (depth > 1) {
+      e.preventDefault();
+      manualOutdent(li);
+      return;
+    }
+
+    if (depth === 1 && !li.textContent?.trim()) {
+      e.preventDefault();
+      exitList(li);
+    }
+  }
+
+  function handleKeydown(e: KeyboardEvent) {
+    if (e.key === 'Tab') handleTab(e);
+    else if (e.key === 'Backspace') handleBackspace(e);
+  }
+
   // mousedown|preventDefault keeps the editor's text selection so the command
   // applies to the highlighted text instead of losing focus first.
   function exec(cmd: string, arg?: string) {
@@ -75,6 +205,7 @@
     tabindex="0"
     data-placeholder={placeholder}
     on:input={sync}
+    on:keydown={handleKeydown}
     on:focus={() => (focused = true)}
     on:blur={() => { focused = false; sync(); }}
     class="richtext px-3 py-2 text-sm min-h-[5rem] text-neutral-900 dark:text-neutral-100 focus:outline-none"

@@ -83,8 +83,20 @@
   .richtext ul {
     @apply list-disc pl-5 my-1;
   }
+  .richtext ul ul {
+    list-style-type: circle;
+  }
+  .richtext ul ul ul {
+    list-style-type: square;
+  }
   .richtext ol {
     @apply list-decimal pl-5 my-1;
+  }
+  .richtext ol ol {
+    list-style-type: lower-alpha;
+  }
+  .richtext ol ol ol {
+    list-style-type: lower-roman;
   }
   .richtext li {
     @apply my-0.5;

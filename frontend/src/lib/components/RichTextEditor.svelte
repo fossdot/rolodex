@@ -23,7 +23,8 @@
     value = el.innerHTML;
   }
 
-  
+  const isList = (n: Element | null): boolean => n?.tagName === 'UL' || n?.tagName === 'OL';
+
   function getCaretListItem(): HTMLLIElement | null {
     const sel = window.getSelection();
     const node = sel?.anchorNode;
@@ -31,9 +32,11 @@
     return (node instanceof Element ? node : node.parentElement)?.closest('li') ?? null;
   }
 
+  // False whenever text is selected: Backspace must delete the selection then,
+  // not reinterpret the anchor as a caret and outdent instead.
   function isCaretAtStartOf(li: HTMLLIElement): boolean {
     const sel = window.getSelection();
-    if (!sel || !sel.anchorNode) return false;
+    if (!sel || !sel.anchorNode || !sel.isCollapsed) return false;
     const range = document.createRange();
     range.selectNodeContents(li);
     range.setEnd(sel.anchorNode, sel.anchorOffset);
@@ -56,13 +59,32 @@
     return depth;
   }
 
+  // Lift `li` out by one level. Two nesting shapes reach here: Chromium's
+  // execCommand puts the nested list next to the parent <li>, while pasted
+  // content (Docs, Word) puts it inside it. Both normalise to the former.
   function manualOutdent(li: HTMLLIElement) {
-    const innerList = li.parentElement;  
+    const innerList = li.parentElement;
     if (!innerList) return;
-    const outerList = innerList.parentElement;
-    if (!outerList) return;
+    // Insert after the whole nested block — the parent <li> when the list hangs
+    // off it, otherwise the list itself.
+    const host = isList(innerList.parentElement) ? innerList : innerList.parentElement;
+    const outerList = host?.parentElement;
+    if (!host || !outerList) return;
 
-    outerList.insertBefore(li, innerList.nextSibling);
+    // Items below `li` are carried along one level down, so the visible order
+    // never changes. A list directly after `li` already holds its children —
+    // reuse it as the tail rather than wrapping it into another level.
+    const next = li.nextElementSibling;
+    const tail = isList(next) ? (next as Element) : document.createElement(innerList.tagName);
+    let sib = tail === next ? tail.nextElementSibling : li.nextElementSibling;
+    while (sib) {
+      const after = sib.nextElementSibling;
+      tail.appendChild(sib);
+      sib = after;
+    }
+
+    outerList.insertBefore(li, host.nextSibling);
+    if (tail.children.length) li.after(tail);
 
     if (!innerList.querySelector('li')) {
       innerList.remove();
@@ -78,7 +100,7 @@
   }
 
   function exitList(li: HTMLLIElement) {
-    const list = li.parentElement; 
+    const list = li.parentElement;
     if (!list) return;
 
     const line = document.createElement('div');

@@ -23,6 +23,114 @@
     value = el.innerHTML;
   }
 
+  
+  function getCaretListItem(): HTMLLIElement | null {
+    const sel = window.getSelection();
+    const node = sel?.anchorNode;
+    if (!node) return null;
+    return (node instanceof Element ? node : node.parentElement)?.closest('li') ?? null;
+  }
+
+  function isCaretAtStartOf(li: HTMLLIElement): boolean {
+    const sel = window.getSelection();
+    if (!sel || !sel.anchorNode) return false;
+    const range = document.createRange();
+    range.selectNodeContents(li);
+    range.setEnd(sel.anchorNode, sel.anchorOffset);
+    return range.toString().length === 0;
+  }
+
+  function handleTab(e: KeyboardEvent) {
+    if (!getCaretListItem()) return;
+    e.preventDefault();
+    exec(e.shiftKey ? 'outdent' : 'indent');
+  }
+
+  function listDepth(li: HTMLLIElement): number {
+    let depth = 0;
+    let node: Element | null = li.parentElement;
+    while (node && node !== el) {
+      if (node.tagName === 'UL' || node.tagName === 'OL') depth++;
+      node = node.parentElement;
+    }
+    return depth;
+  }
+
+  function manualOutdent(li: HTMLLIElement) {
+    const innerList = li.parentElement;  
+    if (!innerList) return;
+    const outerList = innerList.parentElement;
+    if (!outerList) return;
+
+    outerList.insertBefore(li, innerList.nextSibling);
+
+    if (!innerList.querySelector('li')) {
+      innerList.remove();
+    }
+    const range = document.createRange();
+    range.selectNodeContents(li);
+    range.collapse(true);
+    const sel = window.getSelection();
+    sel?.removeAllRanges();
+    sel?.addRange(range);
+
+    sync();
+  }
+
+  function exitList(li: HTMLLIElement) {
+    const list = li.parentElement; 
+    if (!list) return;
+
+    const line = document.createElement('div');
+    line.innerHTML = '<br>';
+
+    const tail = document.createElement(list.tagName);
+    let sib = li.nextElementSibling;
+    while (sib) {
+      const next = sib.nextElementSibling;
+      tail.appendChild(sib);
+      sib = next;
+    }
+
+    list.after(line);
+    if (tail.children.length) line.after(tail);
+
+    li.remove();
+    if (!list.children.length) list.remove();
+
+    const range = document.createRange();
+    range.selectNodeContents(line);
+    range.collapse(true);
+    const sel = window.getSelection();
+    sel?.removeAllRanges();
+    sel?.addRange(range);
+
+    sync();
+  }
+
+  function handleBackspace(e: KeyboardEvent) {
+    const li = getCaretListItem();
+    if (!li || !isCaretAtStartOf(li)) return;
+
+    const depth = listDepth(li);
+
+    if (depth > 1) {
+      e.preventDefault();
+      manualOutdent(li);
+      return;
+    }
+
+    if (depth === 1 && !li.textContent?.trim()) {
+      e.preventDefault();
+      exitList(li);
+    }
+  }
+
+  function handleKeydown(e: KeyboardEvent) {
+    if (e.key === 'Tab') handleTab(e);
+    else if (e.key === 'Backspace') handleBackspace(e);
+  }
+
   // mousedown|preventDefault keeps the editor's text selection so the command
   // applies to the highlighted text instead of losing focus first.
   function exec(cmd: string, arg?: string) {
@@ -75,6 +183,7 @@
     tabindex="0"
     data-placeholder={placeholder}
     on:input={sync}
+    on:keydown={handleKeydown}
     on:focus={() => (focused = true)}
     on:blur={() => { focused = false; sync(); }}
     class="richtext px-3 py-2 text-sm min-h-[5rem] text-neutral-900 dark:text-neutral-100 focus:outline-none"

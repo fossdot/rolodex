@@ -1,6 +1,6 @@
 <script lang="ts">
   import { base } from '$app/paths';
-  import { onMount } from 'svelte';
+  import { onMount, tick } from 'svelte';
   import { page } from '$app/stores';
   import { goto } from '$app/navigation';
   import { pb, photoUrl } from '$lib/pb';
@@ -460,6 +460,71 @@
     ? activities.filter((a) => a.logged_by === employeeFilter)
     : activities;
 
+  // ── Shareable activity links ────────────────────────────────────────────────
+  // An activity belongs to a contact's story, so its link opens the contact and
+  // jumps to the entry rather than showing it stranded on its own page.
+  //
+  // A query param, not a #hash: the sign-in redirect captures `url.search` to
+  // build `?next=`, and a hash never reaches the server or that capture — so a
+  // hash link would survive the login round trip only to land at the top of the
+  // page with the activity lost.
+  let highlightedActivity = '';
+  let highlightTimer: ReturnType<typeof setTimeout>;
+
+  function activityUrl(activityId: string): string {
+    return `${window.location.origin}${base}/contacts/${id}?activity=${activityId}`;
+  }
+
+  async function copyActivityLink(activityId: string) {
+    const url = activityUrl(activityId);
+    try {
+      if (navigator.clipboard?.writeText) {
+        await navigator.clipboard.writeText(url);
+      } else {
+        throw new Error('no clipboard');
+      }
+      toasts.success('Link copied');
+    } catch {
+      // navigator.clipboard is undefined outside a secure context — e.g. dev
+      // over a LAN IP — so fall back rather than leaving the button dead.
+      const ta = document.createElement('textarea');
+      ta.value = url;
+      ta.setAttribute('readonly', '');
+      ta.style.cssText = 'position:fixed;top:-9999px';
+      document.body.appendChild(ta);
+      ta.select();
+      let ok = false;
+      try {
+        ok = document.execCommand('copy');
+      } catch {
+        ok = false;
+      }
+      ta.remove();
+      if (ok) toasts.success('Link copied');
+      else toasts.error('Could not copy the link. Copy it from the address bar instead.');
+    }
+  }
+
+  // Scroll to the linked activity once the timeline has actually rendered.
+  // Guarded on `scrolledTo` so re-renders (a reaction, a reminder edit) don't
+  // yank the page back to it.
+  let scrolledTo = '';
+  async function revealLinkedActivity() {
+    const wanted = $page.url.searchParams.get('activity');
+    if (!wanted || scrolledTo === wanted) return;
+    if (!activities.some((a) => a.id === wanted)) return;
+    scrolledTo = wanted;
+    await tick();
+    const el = document.getElementById(`activity-${wanted}`);
+    if (!el) return;
+    const reduce = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    el.scrollIntoView({ behavior: reduce ? 'auto' : 'smooth', block: 'center' });
+    highlightedActivity = wanted;
+    clearTimeout(highlightTimer);
+    highlightTimer = setTimeout(() => (highlightedActivity = ''), 2600);
+  }
+  $: if (activities.length) revealLinkedActivity();
+
   function formatDate(d: string) {
     if (!d) return '—';
     return new Date(d).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' });
@@ -853,7 +918,12 @@
               {:else}
               <!-- Deleted activities are filtered out server-side, so there is no
                    struck-through state to render here. -->
-              <div class="card px-4 py-3.5 flex items-start gap-3 group animate-fade-in">
+              <div
+                id="activity-{activity.id}"
+                class="card px-4 py-3.5 flex items-start gap-3 group animate-fade-in scroll-mt-24 transition-shadow duration-500 {highlightedActivity === activity.id
+                  ? 'ring-2 ring-accent dark:ring-accent-dark'
+                  : ''}"
+              >
                 <div class="w-1.5 h-1.5 rounded-full bg-accent dark:bg-accent-dark mt-2 shrink-0"></div>
                 <div class="flex-1 min-w-0">
                   <div class="flex items-start justify-between gap-2">
@@ -865,6 +935,14 @@
                       {/if}
                     </p>
                     <div class="flex items-center gap-1 shrink-0">
+                      <button
+                        on:click={() => copyActivityLink(activity.id)}
+                        class="btn-ghost p-1 text-neutral-400 hover:text-accent dark:hover:text-accent-dark"
+                        title="Copy a link to this activity"
+                        aria-label="Copy a link to this activity"
+                      >
+                        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>
+                      </button>
                       {#if canEditActivity(activity)}
                         <button on:click={() => openActivityEdit(activity)} class="btn-ghost p-1 text-neutral-400 hover:text-accent dark:hover:text-accent-dark" title="Edit activity" aria-label="Edit activity">
                           <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"/></svg>

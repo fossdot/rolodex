@@ -4,6 +4,7 @@
   import { page } from '$app/stores';
   import { goto } from '$app/navigation';
   import { currentUser, theme, shortcutsHelp } from '$lib/stores';
+  import { afterLogin, loginUrl } from '$lib/nav';
   import Sidebar from '$lib/components/Sidebar.svelte';
   import RemindersBell from '$lib/components/RemindersBell.svelte';
   import Toasts from '$lib/components/Toasts.svelte';
@@ -27,12 +28,14 @@
   let mobileNavOpen = false;
   $: $page.url.pathname, (mobileNavOpen = false);
 
-  // Redirect logic
+  // Redirect logic. Both directions carry `?next=` so a shared deep link — an
+  // activity permalink pasted into chat, say — survives the sign-in round trip
+  // instead of dumping the visitor on /contacts.
   $: if (typeof window !== 'undefined') {
     if (!$currentUser && !isPublic) {
-      goto(`${base}/login`);
+      goto(loginUrl($page.url.pathname + $page.url.search));
     } else if ($currentUser && $page.url.pathname === `${base}/login`) {
-      goto(`${base}/contacts`);
+      goto(afterLogin($page.url.searchParams.get('next')));
     }
   }
 

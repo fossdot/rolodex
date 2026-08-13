@@ -1,8 +1,10 @@
 <script lang="ts">
   import { base } from '$app/paths';
   import { goto } from '$app/navigation';
+  import { page } from '$app/stores';
   import { pb } from '$lib/pb';
   import { toasts, theme } from '$lib/stores';
+  import { afterLogin } from '$lib/nav';
   import ThemeToggle from '$lib/components/ThemeToggle.svelte';
 
   let email = '';
@@ -10,6 +12,11 @@
   let loading = false;
   let oauthLoading = false;
   let error = '';
+
+  // Where sign-in lands. Honours ?next= so a deep link shared in chat survives
+  // the round trip — including the MFA step, which stays on this same URL, and
+  // the Google popup flow, which never navigates away. Falls back to /contacts.
+  const land = () => goto(afterLogin($page.url.searchParams.get('next')));
 
   // ── MFA (email OTP) state ────────────────────────────────────────────────────
   // After a correct password (or Google sign-in), PocketBase returns a 401 with an
@@ -67,7 +74,7 @@
     error = '';
     try {
       await pb.collection('users').authWithOTP(otpId, otpCode.trim(), { mfaId });
-      await goto(`${base}/contacts`);
+      await land();
       toasts.success('Welcome back!');
     } catch {
       error = 'Invalid or expired code. Please try again.';
@@ -139,7 +146,7 @@
     error = '';
     try {
       await pb.collection('users').authWithPassword(email, password);
-      await goto(`${base}/contacts`);
+      await land();
       toasts.success('Welcome back!');
     } catch (e: unknown) {
       const id = getMfaId(e);
@@ -160,7 +167,7 @@
     error = '';
     try {
       await pb.collection('users').authWithOAuth2({ provider: 'google' });
-      await goto(`${base}/contacts`);
+      await land();
       toasts.success('Welcome back!');
     } catch (e: unknown) {
       const id = getMfaId(e);

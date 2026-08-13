@@ -6,10 +6,9 @@
   import type { Activity, Contact, Reaction, User } from '$lib/types';
   import { ACTIVITY_TYPES } from '$lib/constants';
   import Avatar from '$lib/components/Avatar.svelte';
-  import Reactions from '$lib/components/Reactions.svelte';
-  import RichText from '$lib/components/RichText.svelte';
+  import ActivityDetail from '$lib/components/ActivityDetail.svelte';
   import { contactLabel } from '$lib/org';
-  import { participantLabel, participantLine } from '$lib/activity';
+  import { participantLine } from '$lib/activity';
 
   type Period = 'week' | 'month' | 'quarter' | 'year' | 'all' | 'custom';
   let period: Period = 'month';
@@ -332,42 +331,12 @@
                   <!-- Expanded detail -->
                   {#if expandedId === act.id}
                     <div class="px-4 pb-4 pl-9 animate-fade-in">
-                      <div class="bg-neutral-50 dark:bg-neutral-900 rounded-lg p-4 space-y-3">
-                        {#if act.notes}
-                          <div>
-                            <p class="text-[10px] font-semibold text-neutral-400 dark:text-neutral-500 uppercase tracking-wider mb-1">Notes</p>
-                            <RichText value={act.notes} extraClass="text-sm text-neutral-700 dark:text-neutral-300" />
-                          </div>
-                        {/if}
-                        <div class="flex flex-wrap items-center gap-x-5 gap-y-2 text-xs">
-                          {#if act.event_link}
-                            <a href={act.event_link} target="_blank" rel="noopener noreferrer" class="flex items-center gap-1.5 text-accent dark:text-accent-dark hover:underline">
-                              <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                                <path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/>
-                              </svg>
-                              Event link
-                            </a>
-                          {/if}
-                          <!-- Every participant is linked here, not just the first. -->
-                          {#each act.expand?.contacts ?? [] as person (person.id)}
-                            <a href="{base}/contacts/{person.id}" class="flex items-center gap-1.5 text-neutral-600 dark:text-neutral-400 hover:text-accent dark:hover:text-accent-dark">
-                              <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                                <path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/>
-                              </svg>
-                              {participantLabel(act, person)}
-                            </a>
-                          {/each}
-                          <span class="text-neutral-400 dark:text-neutral-500">
-                            logged by {act.expand?.logged_by?.name || act.expand?.logged_by?.email || 'Unknown'}
-                          </span>
-                        </div>
-
-                        <Reactions
-                          activityId={act.id}
-                          reactions={reactionsByActivity[act.id] ?? []}
-                          on:change={(e) => (reactionsByActivity = { ...reactionsByActivity, [act.id]: e.detail })}
-                        />
-                      </div>
+                      <!-- Shared with /activities/[id] so the two can't drift. -->
+                      <ActivityDetail
+                        {act}
+                        reactions={reactionsByActivity[act.id] ?? []}
+                        on:change={(e) => (reactionsByActivity = { ...reactionsByActivity, [act.id]: e.detail })}
+                      />
                     </div>
                   {/if}
                 </div>

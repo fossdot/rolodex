@@ -339,32 +339,41 @@
     {:else}
       <!-- Stats: one compact strip on phones, three cards from sm: up -->
       <div class="card grid grid-cols-3 divide-x divide-neutral-100 dark:divide-neutral-800 mb-6 sm:hidden">
-        <div class="px-2 py-3 text-center">
+        <a href="{base}/rolodex" class="px-2 py-3 text-center active:bg-neutral-50 dark:active:bg-neutral-800/60">
           <p class="text-[10px] text-neutral-500 dark:text-neutral-400 uppercase tracking-wider font-medium mb-1">Contacts</p>
           <p class="text-xl font-semibold text-neutral-900 dark:text-neutral-50 tabular-nums">{totalContacts}</p>
-        </div>
-        <div class="px-2 py-3 text-center">
+        </a>
+        <a href="{base}/activities" class="px-2 py-3 text-center active:bg-neutral-50 dark:active:bg-neutral-800/60">
           <p class="text-[10px] text-neutral-500 dark:text-neutral-400 uppercase tracking-wider font-medium mb-1">Activities</p>
           <p class="text-xl font-semibold text-neutral-900 dark:text-neutral-50 tabular-nums">{totalActivities}</p>
-        </div>
-        <div class="px-2 py-3 text-center">
+        </a>
+        <a href="{base}/admin/team" class="px-2 py-3 text-center active:bg-neutral-50 dark:active:bg-neutral-800/60">
           <p class="text-[10px] text-neutral-500 dark:text-neutral-400 uppercase tracking-wider font-medium mb-1">Team</p>
           <p class="text-xl font-semibold text-neutral-900 dark:text-neutral-50 tabular-nums">{totalUsers}</p>
-        </div>
+        </a>
       </div>
       <div class="hidden sm:grid sm:grid-cols-3 gap-4 mb-6">
-        <div class="card p-5">
-          <p class="text-xs text-neutral-500 dark:text-neutral-400 uppercase tracking-wider font-medium mb-2">Total Contacts</p>
+        <a href="{base}/rolodex" class="card p-5 group hover:border-accent/40 dark:hover:border-accent-dark/40 transition-colors">
+          <div class="flex items-baseline justify-between gap-2 mb-2">
+            <p class="text-xs text-neutral-500 dark:text-neutral-400 uppercase tracking-wider font-medium">Total Contacts</p>
+            <span class="text-xs text-accent dark:text-accent-dark opacity-0 group-hover:opacity-100 transition-opacity">Browse →</span>
+          </div>
           <p class="text-3xl font-semibold text-neutral-900 dark:text-neutral-50 tabular-nums">{totalContacts}</p>
-        </div>
-        <div class="card p-5">
-          <p class="text-xs text-neutral-500 dark:text-neutral-400 uppercase tracking-wider font-medium mb-2">Activities Logged</p>
+        </a>
+        <a href="{base}/activities" class="card p-5 group hover:border-accent/40 dark:hover:border-accent-dark/40 transition-colors">
+          <div class="flex items-baseline justify-between gap-2 mb-2">
+            <p class="text-xs text-neutral-500 dark:text-neutral-400 uppercase tracking-wider font-medium">Activities Logged</p>
+            <span class="text-xs text-accent dark:text-accent-dark opacity-0 group-hover:opacity-100 transition-opacity">Open →</span>
+          </div>
           <p class="text-3xl font-semibold text-neutral-900 dark:text-neutral-50 tabular-nums">{totalActivities}</p>
-        </div>
-        <div class="card p-5">
-          <p class="text-xs text-neutral-500 dark:text-neutral-400 uppercase tracking-wider font-medium mb-2">Team Members</p>
+        </a>
+        <a href="{base}/admin/team" class="card p-5 group hover:border-accent/40 dark:hover:border-accent-dark/40 transition-colors">
+          <div class="flex items-baseline justify-between gap-2 mb-2">
+            <p class="text-xs text-neutral-500 dark:text-neutral-400 uppercase tracking-wider font-medium">Team Members</p>
+            <span class="text-xs text-accent dark:text-accent-dark opacity-0 group-hover:opacity-100 transition-opacity">Manage →</span>
+          </div>
           <p class="text-3xl font-semibold text-neutral-900 dark:text-neutral-50 tabular-nums">{totalUsers}</p>
-        </div>
+        </a>
       </div>
 
       <div class="grid grid-cols-1 lg:grid-cols-5 gap-5">

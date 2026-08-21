@@ -367,6 +367,23 @@
         <p>Admins get a dashboard with team-wide activity and a simple engagement score per person:</p>
         <p class="formula">contacts added × 1 &nbsp;+&nbsp; activities logged × 2 &nbsp;=&nbsp; score</p>
         <p>Admins can also view and restore deleted contacts and activities.</p>
+
+        <h3>Managing the team</h3>
+        <p>
+          The three tiles at the top of the dashboard are links: contacts and activities open their lists, and
+          <strong>Team Members</strong> opens the team screen. Everything about who can get in lives there.
+        </p>
+        <ul>
+          <li><strong>Invite someone</strong> — enter their @fossunited.org address and pick a role. They get an email with a link to set their own password; nothing is shared with them until they do.</li>
+          <li><strong>Change a role</strong> — Admin or Employee, from the dropdown on their row. Admins see the dashboard, the team screen, and deleted contacts.</li>
+          <li><strong>Remove access</strong> — for someone who has left. They can't sign in, and the app signs them out next time it loads for them. Everything they added <em>keeps their name on it</em>: this is not a delete, and <strong>Restore</strong> undoes it.</li>
+          <li><strong>Password link</strong> — emails them a link to set a new password, for when someone is locked out. They can also use <strong>Forgot password?</strong> on the sign-in page themselves.</li>
+        </ul>
+        <p class="note">
+          You can't change your own role or remove your own access — ask another admin, which is also how an admin
+          steps down. Rolodex won't let the last admin be removed either, so nobody can lock everyone out. Only
+          admins can add accounts: nobody can sign themselves up.
+        </p>
       </section>
 
       <section id="tips">

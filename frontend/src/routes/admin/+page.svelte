@@ -8,7 +8,7 @@
   import { ACTIVITY_TYPES } from '$lib/constants';
   import Avatar from '$lib/components/Avatar.svelte';
   import { contactLabel, primaryOrg } from '$lib/org';
-  import { participantLine } from '$lib/activity';
+  import { participantLine, primaryParticipantId } from '$lib/activity';
 
   let loading = true;
 
@@ -422,7 +422,7 @@
                       {getActivityLabel(act.activity_type)}
                     </p>
                     {#if act.expand?.contacts?.length}
-                      <a href="{base}/contacts/{act.contact}" class="text-xs text-accent dark:text-accent-dark hover:underline truncate block">
+                      <a href="{base}/contacts/{primaryParticipantId(act)}" class="text-xs text-accent dark:text-accent-dark hover:underline truncate block">
                         {participantLine(act)}
                       </a>
                     {/if}

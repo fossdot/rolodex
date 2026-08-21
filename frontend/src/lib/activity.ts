@@ -44,3 +44,16 @@ export function participantLine(activity: (WithRoles & { expand?: { contacts?: C
 export function otherParticipants(activity: Activity, contactId: string): Contact[] {
   return (activity.expand?.contacts ?? []).filter((c) => c.id !== contactId);
 }
+
+/**
+ * The participant a one-line summary should link to: the first on the activity.
+ *
+ * `activities.contacts` is a multi-relation — there is no `contact` field — so a
+ * row that names several people on one line still needs a single href. The first
+ * participant is it, mirroring how the first of a contact's orgs is the primary
+ * one. Returns '' when a query forgot `expand: 'contacts'`, so callers can skip
+ * the link rather than pointing it at nothing.
+ */
+export function primaryParticipantId(activity: { expand?: { contacts?: Contact[] } } | null | undefined): string {
+  return activity?.expand?.contacts?.[0]?.id ?? '';
+}

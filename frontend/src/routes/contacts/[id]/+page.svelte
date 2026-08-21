@@ -1,6 +1,6 @@
 <script lang="ts">
   import { base } from '$app/paths';
-  import { onMount, tick } from 'svelte';
+  import { tick } from 'svelte';
   import { page } from '$app/stores';
   import { goto } from '$app/navigation';
   import { pb, photoUrl } from '$lib/pb';
@@ -51,6 +51,7 @@
   }
 
   $: id = $page.params.id ?? '';
+  let loadedFor = ''; // guards the reactive reload on client-side navigation
 
   let reactionsByActivity: Record<string, Reaction[]> = {};
   let logs: ContactLog[] = [];
@@ -208,6 +209,22 @@
 
   async function load() {
     loading = true;
+    // Drop everything scoped to the contact we were showing. On a hop between
+    // contacts this is the difference between a fresh page and the previous
+    // person's timeline sitting under the new name.
+    contact = null;
+    activities = [];
+    reactionsByActivity = {};
+    logs = [];
+    remindersByActivity = {};
+    employeeFilter = '';
+    lightboxOpen = false;
+    editingActivityId = null;
+    editingReminderFor = null;
+    closeActivityForm();
+    scrolledTo = '';
+    highlightedActivity = '';
+    clearTimeout(highlightTimer);
     try {
       [contact, activities] = await Promise.all([
         pb.collection('contacts').getOne<Contact>(id, { expand: 'added_by,deleted_by,orgs' }),
@@ -232,7 +249,17 @@
     }
   }
 
-  onMount(load);
+  // Load on mount and reload when hopping to another contact. SvelteKit reuses
+  // this component for /contacts/[id] -> /contacts/[other], so only `id` changed:
+  // loading once in onMount left the previous contact on screen under the new id,
+  // and every write here keys off `id`, so a logged activity, a reminder or a
+  // delete landed on the contact in the URL rather than the one being displayed.
+  // Mirrors the organisation page. loadedFor is set before load() so this can't
+  // retrigger itself.
+  $: if (typeof window !== 'undefined' && id && id !== loadedFor) {
+    loadedFor = id;
+    load();
+  }
 
   function getRoleLabel(v: string) { return FU_ROLES.find((r) => r.value === v)?.label ?? v; }
   function getTopicLabel(v: string) { return TOPICS.find((t) => t.value === v)?.label ?? v; }
@@ -472,7 +499,9 @@
   let highlightTimer: ReturnType<typeof setTimeout>;
 
   function activityUrl(activityId: string): string {
-    return `${window.location.origin}${base}/contacts/${id}?activity=${activityId}`;
+    // The loaded contact, not the route param: the two can only differ mid-load,
+    // and a link built from the wrong one opens a page where the entry is absent.
+    return `${window.location.origin}${base}/contacts/${contact?.id ?? id}?activity=${activityId}`;
   }
 
   async function copyActivityLink(activityId: string) {
@@ -523,7 +552,9 @@
     clearTimeout(highlightTimer);
     highlightTimer = setTimeout(() => (highlightedActivity = ''), 2600);
   }
-  $: if (activities.length) revealLinkedActivity();
+  // Depends on the query string as well as the timeline, so an in-app link that
+  // only changes ?activity= still reveals its entry.
+  $: if (activities.length && $page.url.search) revealLinkedActivity();
 
   function formatDate(d: string) {
     if (!d) return '—';

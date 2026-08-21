@@ -13,6 +13,7 @@
     ['organisations', 'Organisations'],
     ['views', 'My Contacts vs Rolodex'],
     ['admin', 'Admin & scoring'],
+    ['team', 'Team & access'],
     ['tips', 'Tips & shortcuts'],
   ];
 </script>
@@ -367,6 +368,93 @@
         <p>Admins get a dashboard with team-wide activity and a simple engagement score per person:</p>
         <p class="formula">contacts added × 1 &nbsp;+&nbsp; activities logged × 2 &nbsp;=&nbsp; score</p>
         <p>Admins can also view and restore deleted contacts and activities.</p>
+
+        <h3>The dashboard tiles</h3>
+        <p>
+          The three numbers at the top are links, not just counts: <strong>Total Contacts</strong> opens the whole
+          rolodex, <strong>Activities Logged</strong> opens the activity feed, and <strong>Team Members</strong>
+          opens the team screen below.
+        </p>
+      </section>
+
+      <section id="team">
+        <h2>Team &amp; access</h2>
+        <p>
+          Everything about who can get into Rolodex lives on one screen: <strong>Admin → Team Members →
+          Manage the team</strong>. You need to be an admin to open it.
+        </p>
+
+        <h3>What each role can do</h3>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr><th>&nbsp;</th><th>Employee</th><th>Admin</th></tr>
+            </thead>
+            <tbody>
+              <tr><td>Add contacts, log activities, set reminders</td><td>Yes</td><td>Yes</td></tr>
+              <tr><td>See every contact in the network</td><td>Yes</td><td>Yes</td></tr>
+              <tr><td>Edit or delete an activity</td><td>Only ones they logged</td><td>Any</td></tr>
+              <tr><td>Edit or delete a contact</td><td>Only ones they added</td><td>Any</td></tr>
+              <tr><td>Dashboard, scores, deleted contacts</td><td>No</td><td>Yes</td></tr>
+              <tr><td>Invite people, change roles, remove access</td><td>No</td><td>Yes</td></tr>
+            </tbody>
+          </table>
+        </div>
+
+        <h3>Inviting someone</h3>
+        <p>
+          Press <strong>Invite a teammate</strong>, enter their <code>@fossunited.org</code> address and choose a
+          role. Rolodex creates the account and emails them a link to set their own password — you never see or
+          choose it, and nothing in the rolodex is reachable until they do.
+        </p>
+        <p>
+          Only admins can create accounts. Nobody can sign themselves up, even with a work address.
+        </p>
+        <p class="note">
+          If the invite email doesn't send, the message says so — the account still exists, so don't send the invite
+          twice. Use <strong>Password link</strong> on their row to try the email again.
+        </p>
+
+        <h3>Changing someone's role</h3>
+        <p>
+          Pick Admin or Employee from the dropdown on their row; it takes effect the next time their app loads.
+          Two rules are enforced no matter what:
+        </p>
+        <ul>
+          <li><strong>You can't change your own role or access.</strong> Ask another admin — which is also how an admin steps down: they promote a colleague, and that colleague demotes them.</li>
+          <li><strong>The last active admin can't be removed or demoted.</strong> There is always someone who can manage the team, so nobody can lock everyone out by accident.</li>
+        </ul>
+
+        <h3>When someone leaves</h3>
+        <p>
+          Use <strong>Remove</strong> on their row. It stops them signing in, and the app signs them out the next
+          time it loads for them. Their row stays on the screen marked <strong>no access</strong>, and
+          <strong>Restore</strong> puts them back.
+        </p>
+        <p>
+          <strong>Nothing they contributed is touched.</strong> Every contact still reads "Added by" their name,
+          every activity still says who logged it, and their score stays on the dashboard. That is the point of
+          removing access rather than deleting the account: deleting would blank their name everywhere, and the
+          organisation would lose the record of who built those relationships.
+        </p>
+        <p class="note">
+          For an ordinary departure this is all you need. If an account has actually been compromised, tell whoever
+          runs the server as well — removing access closes the app immediately, but a stolen sign-in token can keep
+          working against the raw API until it expires, and only a server admin can cut that short.
+        </p>
+
+        <h3>Someone locked out</h3>
+        <p>
+          <strong>Password link</strong> on their row emails them a link to set a new password. They can also do it
+          themselves with <strong>Forgot password?</strong> on the sign-in page — the button is for when they can't
+          receive that, or aren't sure they still have an account.
+        </p>
+        <p class="note">
+          You won't see other people's email addresses on this screen, only your own. That is deliberate: the roster
+          shows names and roles, and the password button looks the address up without putting everyone's inbox in
+          front of every colleague. Invited accounts also show as unverified in the server dashboard — harmless,
+          nothing in Rolodex requires verification.
+        </p>
       </section>
 
       <section id="tips">

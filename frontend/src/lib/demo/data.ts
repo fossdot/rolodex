@@ -17,6 +17,8 @@ export const DEMO_USERS: Rec[] = [
   { id: 'u_rahul', email: 'rahul@fossunited.org', name: 'Rahul Verma', role: 'employee', avatar: '', created: ISO('2025-01-12'), updated: ISO('2025-01-12') },
   { id: 'u_sneha', email: 'sneha@fossunited.org', name: 'Sneha Iyer', role: 'employee', avatar: '', created: ISO('2025-02-02'), updated: ISO('2025-02-02') },
   { id: 'u_karthik', email: 'karthik@fossunited.org', name: 'Karthik Nair', role: 'employee', avatar: '', created: ISO('2025-03-09'), updated: ISO('2025-03-09') },
+  // A former member: access removed, but their name stays on what they added.
+  { id: 'u_gone', email: 'imran@fossunited.org', name: 'Imran Sheikh', role: 'employee', avatar: '', disabled: true, created: ISO('2025-01-20'), updated: ISO('2026-06-30') },
 ];
 
 // The viewer is signed in as this user (an admin, so the demo shows everything).

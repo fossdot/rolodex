@@ -215,6 +215,24 @@
           Roles are labels for context, not a filter: searching “sponsor” won't return every sponsor. The available
           roles are Speaker, Organiser, Volunteer, Sponsor, Attendee, Mentor, Judge, Maintainer, Host and Other.
         </p>
+        <h3>Sharing a link to an activity</h3>
+        <p>
+          Want a colleague to read one particular activity — the notes from a meeting you just logged, say? Click
+          the <strong>🔗</strong> beside it and the link is copied, ready to paste into Mattermost or an email.
+          Opening it takes them to that contact's page with the activity scrolled into view and highlighted for a
+          moment.
+        </p>
+        <p>
+          Anyone with a Rolodex login can open it, whether or not they logged the activity themselves. If they
+          aren't signed in yet they'll land back on the activity after signing in, rather than on the contacts
+          list.
+        </p>
+        <p class="note">
+          An activity that covers several people sits on each of their timelines, so copy the link from whichever
+          contact you want the reader to land on. Links reach the 100 most recent activities on a timeline; older
+          ones open the contact page with nothing highlighted, as does a link to an activity someone has since
+          deleted.
+        </p>
         <h3>Fixing a mistake</h3>
         <p>
           Made a typo or logged the wrong date? Click the <strong>✎</strong> on an activity to edit it — including

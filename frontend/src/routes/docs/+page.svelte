@@ -216,6 +216,22 @@
           Roles are labels for context, not a filter: searching “sponsor” won't return every sponsor. The available
           roles are Speaker, Organiser, Volunteer, Sponsor, Attendee, Mentor, Judge, Maintainer, Host and Other.
         </p>
+        <h3>Tagging teammates</h3>
+        <p>
+          Several of you in the same meeting? Log it once and tag the colleagues who were there from the
+          <strong>Team members</strong> box on the form — whoever logs it is on it already. The entry then reads
+          <em>by Aarthi · with Rahul, Sneha</em> wherever it appears, so anyone can see who else has the context,
+          and nobody needs to log the same meeting twice.
+        </p>
+        <ul>
+          <li>Tagged teammates get an email with the notes and a link straight to the activity.</li>
+          <li>The contact shows up under their <strong>My Contacts</strong> too, alongside the people they added or logged themselves.</li>
+          <li>They can edit the activity to add what they remember — but only the person who logged it, or an admin, can delete it.</li>
+        </ul>
+        <p class="note">
+          Only the person who logged the activity earns its points on the admin dashboard. Tagging records who was
+          there; it doesn't share out the score.
+        </p>
         <h3>Sharing a link to an activity</h3>
         <p>
           Want a colleague to read one particular activity — the notes from a meeting you just logged, say? Click
@@ -237,8 +253,9 @@
         <h3>Fixing a mistake</h3>
         <p>
           Made a typo or logged the wrong date? Click the <strong>✎</strong> on an activity to edit it — including
-          who was involved, if you missed someone or added them by accident. Only the person who logged it — or an
-          admin — can, and a corrected activity is marked <strong>edited</strong> so the history stays honest.
+          who was involved, if you missed someone or added them by accident. The person who logged it, anyone from
+          the team tagged on it, or an admin can; a corrected activity is marked <strong>edited</strong> so the
+          history stays honest.
         </p>
         <h3>Deleting an activity</h3>
         <p>
@@ -367,6 +384,10 @@
         <h2>Admin &amp; scoring</h2>
         <p>Admins get a dashboard with team-wide activity and a simple engagement score per person:</p>
         <p class="formula">contacts added × 1 &nbsp;+&nbsp; activities logged × 2 &nbsp;=&nbsp; score</p>
+        <p>
+          An activity counts once, for the person who logged it — teammates tagged on it don't score for it, so
+          there's nothing to gain from tagging everyone.
+        </p>
         <p>Admins can also view and restore deleted contacts and activities.</p>
 
         <h3>The dashboard tiles</h3>

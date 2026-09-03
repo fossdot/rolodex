@@ -150,10 +150,154 @@ function normaliseOrgDesignations(record) {
     record.set("org_designations", out);
 }
 
+// ── team members on an activity (issue #26) ──────────────────────────────────
+
+/** ids held by a multi-relation, in order, de-duplicated, blanks dropped. */
+function relationIds(record, field) {
+    const raw = record.get(field);
+    let list = [];
+    if (Array.isArray(raw)) {
+        list = raw;
+    } else {
+        // Fall back to the JSON text, same reasoning as readJsonObject.
+        const text = String(record.getString(field) || "").trim();
+        if (text && text !== "null") {
+            try {
+                const parsed = JSON.parse(text);
+                list = Array.isArray(parsed) ? parsed : [text];
+            } catch (e) {
+                list = [text];
+            }
+        }
+    }
+    const out = [];
+    const seen = {};
+    for (const id of list) {
+        const s = String(id || "").trim();
+        if (!s || seen[s]) continue;
+        seen[s] = true;
+        out.push(s);
+    }
+    return out;
+}
+
+/**
+ * Keep `activities.team` to the *other* members on an activity. Whoever logged
+ * it is on it by definition, so they are never listed twice; duplicates
+ * collapse. Whether each id is a real user is PocketBase's relation check.
+ */
+function normaliseTeam(record) {
+    const logger = String(record.getString("logged_by") || "");
+    record.set("team", relationIds(record, "team").filter((id) => id !== logger));
+}
+
+/**
+ * Email the members newly tagged on an activity — one message to all of them.
+ *
+ * Called by the activities hooks *after* `e.next()`, so the row is saved by the
+ * time this runs, and wrapped there in try/catch: a mail outage must never fail
+ * (or roll back) a logged activity. `actor` is the auth record doing the save,
+ * `newIds` the member ids that were not on the activity before it.
+ */
+function notifyTaggedMembers(app, activity, actor, newIds) {
+    if (!newIds || !newIds.length) return;
+    if (activity.getString("deleted_at") !== "") return;
+
+    const settings = app.settings();
+    const appURL = String(settings.meta.appURL || "").replace(/\/+$/, "");
+
+    const esc = (s) => String(s)
+        .replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+    const humanize = (v) => String(v || "")
+        .split("_").map((w) => (w ? w[0].toUpperCase() + w.slice(1) : w)).join(" ");
+    const stripHtml = (s) => String(s || "")
+        .replace(/<[^>]*>/g, " ").replace(/&nbsp;/g, " ").replace(/\s+/g, " ").replace(/\s+([,.;:!?])/g, "$1").trim();
+    const istDate = (stored) => {
+        const d = new Date(String(stored).replace(" ", "T"));
+        if (isNaN(d.getTime())) return "";
+        const ist = new Date(d.getTime() + 5.5 * 60 * 60 * 1000); // +05:30
+        const mons = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+        return `${ist.getUTCDate()} ${mons[ist.getUTCMonth()]} ${ist.getUTCFullYear()}`;
+    };
+
+    // Recipients: the newly tagged members who have an address. Someone tagging
+    // themselves on an edit gets no mail about it.
+    const actorId = actor ? String(actor.id) : "";
+    const to = [];
+    for (const uid of newIds) {
+        if (uid === actorId) continue;
+        let member;
+        try { member = app.findRecordById("users", uid); } catch (e) { continue; }
+        const addr = member.getString("email");
+        if (addr) to.push({ address: addr, name: member.getString("name") || "" });
+    }
+    if (!to.length) return;
+
+    const actorName = (actor && (actor.getString("name") || actor.getString("email"))) || "A teammate";
+
+    // Who it was with — each contact's name and primary organisation, as the
+    // feed shows them. The first contact is also where the link lands.
+    const contactIds = relationIds(activity, "contacts");
+    const withLabels = [];
+    for (const cid of contactIds) {
+        let c;
+        try { c = app.findRecordById("contacts", cid); } catch (e) { continue; }
+        let org = "";
+        const orgIds = relationIds(c, "orgs");
+        if (orgIds.length) {
+            try { org = app.findRecordById("organisations", orgIds[0]).getString("name"); } catch (e) { /* org row removed */ }
+        }
+        const name = c.getString("name");
+        withLabels.push(name && org ? `${name} (${org})` : (name || org || "Unknown"));
+    }
+    const link = appURL && contactIds.length ? `${appURL}/contacts/${contactIds[0]}?activity=${activity.id}` : "";
+
+    const type = humanize(activity.getString("activity_type"));
+    const ev = activity.getString("event_name");
+    const when = istDate(activity.getString("date"));
+    const head = [type, ev].filter(Boolean).join(" — ") + (when ? ` (${when})` : "");
+    const notes = stripHtml(activity.getString("notes"));
+    const notesShort = notes.length > 320 ? notes.slice(0, 320) + "…" : notes;
+
+    const html =
+        `<div style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;color:#1f2937;max-width:560px;line-height:1.5">` +
+        `<p style="margin:0 0 16px">Hi,</p>` +
+        `<p style="margin:0 0 16px"><strong>${esc(actorName)}</strong> tagged you on an activity in Rolodex.</p>` +
+        `<div style="margin:0 0 18px;padding:12px 14px;background:#f0faf5;border:1px solid #cdebdd;border-radius:8px">` +
+        `<div style="font-size:13px;color:#111827;font-weight:600">${esc(head)}</div>` +
+        (withLabels.length ? `<div style="font-size:13px;color:#374151;margin-top:4px">With ${esc(withLabels.join(", "))}</div>` : "") +
+        (notesShort ? `<div style="font-size:13px;color:#374151;margin-top:8px">${esc(notesShort)}</div>` : "") +
+        `</div>` +
+        (link
+            ? `<p style="margin:0 0 18px"><a href="${esc(link)}" style="display:inline-block;background:#278F5E;color:#ffffff;text-decoration:none;padding:9px 16px;border-radius:8px;font-size:14px;font-weight:600">Open in Rolodex →</a></p>`
+            : "") +
+        `<p style="margin:0;color:#9ca3af;font-size:12px">You can edit the activity to add what you remember. Being tagged records that you were part of it; the entry stays credited to whoever logged it.</p>` +
+        `</div>`;
+
+    const textLines = ["Hi,", "", `${actorName} tagged you on an activity in Rolodex.`, "", head];
+    if (withLabels.length) textLines.push(`With ${withLabels.join(", ")}`);
+    if (notesShort) textLines.push("", notesShort);
+    if (link) textLines.push("", `Open: ${link}`);
+    textLines.push("", "You can edit the activity to add what you remember. The entry stays credited to whoever logged it.");
+
+    const message = new MailerMessage({
+        from: { address: settings.meta.senderAddress, name: settings.meta.senderName },
+        to: to,
+        subject: `${actorName} tagged you on an activity` + (ev ? `: ${ev}` : ""),
+        html: html,
+        text: textLines.join("\n"),
+    });
+    app.newMailClient().send(message);
+    app.logger().info("Notified tagged team members", "activity", activity.id, "to", to.length);
+}
+
 module.exports = {
     normaliseCcEmails,
     MAX_CC_EMAILS,
     normaliseContactRoles,
     normaliseOrgDesignations,
     PARTICIPANT_ROLE_VALUES,
+    relationIds,
+    normaliseTeam,
+    notifyTaggedMembers,
 };

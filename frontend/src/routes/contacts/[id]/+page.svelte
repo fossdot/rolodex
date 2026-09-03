@@ -9,7 +9,7 @@
   import { FU_ROLES, TOPICS, ACTIVITY_TYPES, PARTICIPANT_ROLES } from '$lib/constants';
   import { istToUtc, utcToIstParts, DEFAULT_REMINDER_TIME } from '$lib/reminder';
   import { contactLabel, orgEntries } from '$lib/org';
-  import { otherParticipants, roleLabel } from '$lib/activity';
+  import { otherParticipants, roleLabel, involves, staffOn, teamLine } from '$lib/activity';
   import Avatar from '$lib/components/Avatar.svelte';
   import ReminderFields from '$lib/components/ReminderFields.svelte';
   import Lightbox from '$lib/components/Lightbox.svelte';
@@ -235,7 +235,7 @@
           filter: `contacts.id ?= '${id}'`,
           sort: '-date,-created',
           // `contacts` so a row can show who else was there.
-          expand: 'logged_by,contacts',
+          expand: 'logged_by,contacts,team',
         }).then((r) => r.items),
       ]);
       loadReactions(activities.map((a) => a.id));
@@ -281,6 +281,7 @@
     event_link: string;
     date: string;
     notes: string;
+    team: string[];
   };
 
   // Opening the create form resets only the optional follow-up reminder — the
@@ -315,9 +316,12 @@
         event_link: d.event_link,
         date: d.date,
         notes: d.notes,
+        // Colleagues who were also there (issue #26); the server drops the
+        // logger from the list and emails whoever is newly tagged.
+        team: d.team,
         logged_by: $currentUser?.id,
       });
-      const expanded = await pb.collection('activities').getOne<Activity>(newAct.id, { expand: 'logged_by,contacts' });
+      const expanded = await pb.collection('activities').getOne<Activity>(newAct.id, { expand: 'logged_by,contacts,team' });
       activities = [expanded, ...activities];
 
       // Optional follow-up reminder, born with the activity.
@@ -372,8 +376,11 @@
         // Correcting who did what is part of editing an activity. The server
         // prunes roles for anyone no longer on it.
         contact_roles: mergedRoles,
+        // So is who from the team was there (issue #26). Sent whole: it is a
+        // plain list, and the form showed all of it.
+        team: d.team,
       });
-      const expanded = await pb.collection('activities').getOne<Activity>(activityId, { expand: 'logged_by,contacts' });
+      const expanded = await pb.collection('activities').getOne<Activity>(activityId, { expand: 'logged_by,contacts,team' });
       activities = activities.map((a) => (a.id === activityId ? expanded : a));
       editingActivityId = null;
       toasts.success('Activity updated');
@@ -444,10 +451,15 @@
   // on any contact. Engagement is shared; logged_by is forced to self.
   $: canLogActivity = !!$currentUser && !contact?.deleted_at;
 
-  // Fixing or deleting a logged activity is limited to whoever logged it, or an
-  // admin — mirrors the server updateRule so the UI never offers an action the
-  // API rejects. Both share one gate because both rules are `logged_by || admin`.
+  // Fixing a logged activity is open to whoever logged it, anyone from the team
+  // tagged on it (issue #26), or an admin — mirrors the server updateRule so the
+  // UI never offers an action the API rejects. Deleting is narrower: the logger
+  // or an admin only, which pb_hooks/main.pb.js enforces on the soft-delete
+  // write since the rule alone can't tell the two apart.
   function canEditActivity(a: Activity) {
+    return !!$currentUser && ($currentUser.role === 'admin' || involves(a, $currentUser.id));
+  }
+  function canDeleteActivity(a: Activity) {
     return !!$currentUser && ($currentUser.id === a.logged_by || $currentUser.role === 'admin');
   }
 
@@ -473,18 +485,20 @@
   }
 
   // ── Engaged employees ────────────────────────────────────────────────────────
-  // Everyone who has logged a (non-deleted) activity on this contact.
+  // Everyone from the team who was part of a (non-deleted) activity on this
+  // contact — whoever logged it, and anyone tagged on it (issue #26).
   $: engaged = [
     ...new Map(
       activities
-        .filter((a) => !a.deleted_at && a.expand?.logged_by)
-        .map((a) => [a.logged_by, a.expand!.logged_by as User])
+        .filter((a) => !a.deleted_at)
+        .flatMap((a) => staffOn(a))
+        .map((u) => [u.id, u] as [string, User])
     ).values(),
   ];
 
   let employeeFilter = '';
   $: shownActivities = employeeFilter
-    ? activities.filter((a) => a.logged_by === employeeFilter)
+    ? activities.filter((a) => involves(a, employeeFilter))
     : activities;
 
   // ── Shareable activity links ────────────────────────────────────────────────
@@ -978,6 +992,8 @@
                         <button on:click={() => openActivityEdit(activity)} class="btn-ghost p-1 text-neutral-400 hover:text-accent dark:hover:text-accent-dark" title="Edit activity" aria-label="Edit activity">
                           <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"/></svg>
                         </button>
+                      {/if}
+                      {#if canDeleteActivity(activity)}
                         <button on:click={() => deleteActivity(activity)} class="btn-ghost p-1 text-neutral-400 hover:text-red-500" title="Delete activity" aria-label="Delete activity">
                           <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/></svg>
                         </button>
@@ -1011,6 +1027,11 @@
                   {/if}
                   <p class="text-[11px] text-neutral-400 dark:text-neutral-500 mt-1.5">
                     by {activity.expand?.logged_by?.name || activity.expand?.logged_by?.email || 'Unknown'}
+                    <!-- Colleagues tagged on it (issue #26) — the "with" line above
+                         is other contacts; this one is the team. -->
+                    {#if teamLine(activity)}
+                      · with {teamLine(activity)}
+                    {/if}
                     {#if wasEdited(activity)}
                       · edited {formatDate(activity.updated)}
                     {/if}

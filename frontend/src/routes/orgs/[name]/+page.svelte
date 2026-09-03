@@ -8,7 +8,7 @@
   import { ACTIVITY_TYPES } from '$lib/constants';
   import Avatar from '$lib/components/Avatar.svelte';
   import { contactLabel, loadOrganisations } from '$lib/org';
-  import { participantLine, primaryParticipantId } from '$lib/activity';
+  import { participantLine, primaryParticipantId, staffOn, teamLine } from '$lib/activity';
 
   $: orgName = decodeURIComponent($page.params.name ?? '');
 
@@ -155,7 +155,7 @@
         const aRes = await pb.collection('activities').getList<Activity>(1, 200, {
           filter: `(${orFilter}) && deleted_at = null`,
           sort: '-date,-created',
-          expand: 'logged_by,contacts',
+          expand: 'logged_by,contacts,team',
         });
         activities = aRes.items;
       } else {
@@ -184,12 +184,13 @@
     return new Date(d).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' });
   }
 
-  // Employees who engage with this org (logged activities on its contacts)
+  // Employees who engage with this org — logged an activity on one of its
+  // contacts, or were tagged on one (issue #26).
   $: engaged = [
     ...new Map(
       activities
-        .filter((a) => a.expand?.logged_by)
-        .map((a) => [a.logged_by, a.expand!.logged_by as User])
+        .flatMap((a) => staffOn(a))
+        .map((u) => [u.id, u] as [string, User])
     ).values(),
   ];
 </script>
@@ -377,7 +378,7 @@
                     <p class="text-xs text-neutral-500 dark:text-neutral-400 mt-0.5 truncate">{act.event_name}</p>
                   {/if}
                   <p class="text-[11px] text-neutral-400 dark:text-neutral-500 mt-1">
-                    by {act.expand?.logged_by?.name || act.expand?.logged_by?.email || 'Unknown'}
+                    by {act.expand?.logged_by?.name || act.expand?.logged_by?.email || 'Unknown'}{#if teamLine(act)}{' · with '}{teamLine(act)}{/if}
                   </p>
                 </div>
               </div>

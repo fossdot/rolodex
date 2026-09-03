@@ -38,7 +38,7 @@ const COLLECTIONS = ['contacts', 'activities', 'reminders', 'reactions', 'contac
 const EXPECTED_REMOVED = { contacts: ['org'], activities: ['contact'] };
 const EXPECTED_ADDED = {
   contacts: ['orgs', 'org_designations'],
-  activities: ['contacts', 'contact_roles'],
+  activities: ['contacts', 'contact_roles', 'team'],
   reminders: ['cc', 'cc_emails'],
   users: ['disabled'],
 };

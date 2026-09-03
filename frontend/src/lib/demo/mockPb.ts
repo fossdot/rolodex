@@ -11,6 +11,7 @@ type Db = Record<string, Rec[]>;
 const REL_TARGET: Record<string, string> = {
   added_by: 'users',
   logged_by: 'users',
+  team: 'users',
   deleted_by: 'users',
   editor: 'users',
   user: 'users',
@@ -330,7 +331,11 @@ class Collection {
     // mirror the server hooks: stamp the acting user on the attribution field
     const uid = this.auth.record?.id ?? '';
     if (this.name === 'contacts') rec.added_by = uid;
-    if (this.name === 'activities') rec.logged_by = uid;
+    if (this.name === 'activities') {
+      rec.logged_by = uid;
+      // The logger is on the activity by definition — never also tagged.
+      rec.team = (Array.isArray(rec.team) ? (rec.team as string[]) : []).filter((id) => id !== uid);
+    }
     if (this.name === 'contact_logs') rec.editor = uid;
     if (this.name === 'reactions') {
       rec.user = uid;
@@ -371,6 +376,10 @@ class Collection {
           throw fail('Rolodex needs at least one active admin. Promote someone else first.');
         }
       }
+    }
+
+    if (this.name === 'activities' && Array.isArray(patch.team)) {
+      patch.team = (patch.team as string[]).filter((id) => id !== rec.logged_by);
     }
 
     Object.assign(rec, patch, { updated: new Date().toISOString() });

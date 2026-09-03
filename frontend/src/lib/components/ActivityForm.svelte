@@ -1,7 +1,9 @@
 <script lang="ts">
   import { createEventDispatcher } from 'svelte';
   import { ACTIVITY_TYPES } from '$lib/constants';
+  import { currentUser } from '$lib/stores';
   import RichTextEditor from '$lib/components/RichTextEditor.svelte';
+  import TeamPicker from '$lib/components/TeamPicker.svelte';
   import { sanitizeHtml, htmlToText } from '$lib/sanitizeHtml';
   import type { Activity } from '$lib/types';
 
@@ -29,10 +31,15 @@
   let link = initial.event_link ?? '';
   let date = initial.date || todayStr;
   let notes = initial.notes ?? '';
+  // Other members who were part of it (issue #26). Whoever logged the activity
+  // is on it by definition, so the picker never offers them: the record's
+  // logger on an edit, the signed-in user on a create.
+  let team: string[] = initial.team ?? [];
+  $: loggerId = initial.logged_by || $currentUser?.id || '';
   let errors: Record<string, string> = {};
 
   const dispatch = createEventDispatcher<{
-    save: { activity_type: string; event_name: string; event_link: string; date: string; notes: string };
+    save: { activity_type: string; event_name: string; event_link: string; date: string; notes: string; team: string[] };
     cancel: void;
   }>();
 
@@ -49,6 +56,7 @@
       event_link: link.trim(),
       date,
       notes: sanitizeHtml(notes),
+      team,
     });
   }
 </script>
@@ -83,6 +91,9 @@
       <label for="{idPrefix}-notes" class="label">Notes *</label>
       <RichTextEditor id="{idPrefix}-notes" bind:value={notes} invalid={!!errors.notes} placeholder="What happened, follow-ups, context…" />
       {#if errors.notes}<p class="text-xs text-red-500 mt-1">{errors.notes}</p>{/if}
+    </div>
+    <div class="sm:col-span-2">
+      <TeamPicker id="{idPrefix}-team" bind:selected={team} exclude={loggerId} />
     </div>
   </div>
 

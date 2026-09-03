@@ -106,6 +106,8 @@ onRecordCreateRequest((e) => {
 
 `/contacts` and `/rolodex` share `lib/components/ContactsBrowser.svelte` (a `scope` prop controls the `added_by` filter).
 
+**Duplicate contacts are hinted, not prevented (issue #27).** `contacts` has no uniqueness constraint, and none should be added: names collide legitimately, and production already holds doubles that a unique index would refuse to apply over. Instead both contact forms (`/contacts/new` and `ContactQuickAdd` in the activity flow) render `DuplicateHint`, which debounces the typed name/email/mobile through `findPossibleDuplicates` in `lib/duplicates.ts` — a server-side `~` search on the full name, each name token of 4+ characters, and the email and mobile fields — and lists lookalikes with a link to the profile, or a "Use this contact" action that hands the existing record back to `ContactsPicker` via the `existing` event. Cleaning up doubles that already exist is separate work; there is no contact merge.
+
 **Soft delete, two different visibilities.** Both collections stamp `deleted_at`/`deleted_by` instead of removing rows, but they diverge on who can then see them:
 
 - **Contacts** — hidden from employees; admins still see them (the "Deleted" view) and can restore in-app.

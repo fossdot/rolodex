@@ -243,4 +243,6 @@
   {/if}
 </div>
 
-<ContactQuickAdd bind:open={quickAddOpen} initialName={query.trim()} on:created={onCreated} />
+<!-- `existing` is the duplicate check (issue #27) handing back someone already
+     in the Rolodex — added to the activity exactly like a freshly created one. -->
+<ContactQuickAdd bind:open={quickAddOpen} initialName={query.trim()} on:created={onCreated} on:existing={onCreated} />

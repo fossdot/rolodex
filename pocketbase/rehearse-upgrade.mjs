@@ -137,7 +137,11 @@ if (before.contacts && data.organisations) {
   const orgName = new Map(data.organisations.map((o) => [o.id, o.name]));
   const nowById = new Map(data.contacts.map((c) => [c.id, c]));
   let checked = 0, wrong = [];
-  for (const b of before.contacts) {
+  // This check covers the org → orgs migration. Once production is past it the
+  // snapshot has no `org` field, and comparing against it would flag every
+  // contact that has organisations as "had no org" — a false alarm, not loss.
+  const legacyOrg = before.contacts.some((c) => 'org' in c);
+  for (const b of legacyOrg ? before.contacts : []) {
     const was = String(b.org ?? '').trim();
     const now = nowById.get(b.id);
     if (!now) continue;
@@ -152,7 +156,8 @@ if (before.contacts && data.organisations) {
       }
     }
   }
-  if (wrong.length) { bad(`${wrong.length} contact(s) with a mis-mapped organisation`); for (const w of wrong.slice(0, 8)) console.log('          ' + w); }
+  if (!legacyOrg) console.log('  (skipped — contacts already carry `orgs`; nothing to backfill)');
+  else if (wrong.length) { bad(`${wrong.length} contact(s) with a mis-mapped organisation`); for (const w of wrong.slice(0, 8)) console.log('          ' + w); }
   else ok(`all ${checked} contacts that had an org are linked to it`);
 
   const dupes = new Map();
@@ -169,7 +174,10 @@ console.log('\n═══ activity participants ═══');
 if (before.activities && data.activities) {
   const nowById = new Map(data.activities.map((a) => [a.id, a]));
   const wrong = [];
-  for (const b of before.activities) {
+  // Same story as the organisation backfill: only meaningful for the
+  // contact → contacts migration, while the snapshot still has `contact`.
+  const legacyContact = before.activities.some((a) => 'contact' in a);
+  for (const b of legacyContact ? before.activities : []) {
     const now = nowById.get(b.id);
     if (!now) continue;
     const had = String(b.contact ?? '').trim();
@@ -177,7 +185,8 @@ if (before.activities && data.activities) {
     if (had && !has.includes(had)) wrong.push(`${b.id}: contact ${had} missing from ${JSON.stringify(has)}`);
     if (!had && has.length) wrong.push(`${b.id}: had no contact, now ${JSON.stringify(has)}`);
   }
-  if (wrong.length) { bad(`${wrong.length} activity/activities with a mis-mapped contact`); for (const w of wrong.slice(0, 8)) console.log('          ' + w); }
+  if (!legacyContact) console.log('  (skipped — activities already carry `contacts`; nothing to backfill)');
+  else if (wrong.length) { bad(`${wrong.length} activity/activities with a mis-mapped contact`); for (const w of wrong.slice(0, 8)) console.log('          ' + w); }
   else ok('every activity kept its original contact');
 } else console.log('  (skipped)');
 

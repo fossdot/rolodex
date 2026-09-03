@@ -339,32 +339,53 @@
     {:else}
       <!-- Stats: one compact strip on phones, three cards from sm: up -->
       <div class="card grid grid-cols-3 divide-x divide-neutral-100 dark:divide-neutral-800 mb-6 sm:hidden">
-        <div class="px-2 py-3 text-center">
-          <p class="text-[10px] text-neutral-500 dark:text-neutral-400 uppercase tracking-wider font-medium mb-1">Contacts</p>
+        <a href="{base}/rolodex" class="px-2 py-3 text-center active:bg-neutral-50 dark:active:bg-neutral-800/60">
+          <p class="text-[10px] text-neutral-500 dark:text-neutral-400 uppercase tracking-wider font-medium mb-1 flex items-center justify-center gap-0.5">
+            Contacts
+            <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" class="text-accent dark:text-accent-dark shrink-0"><path d="m9 18 6-6-6-6"/></svg>
+          </p>
           <p class="text-xl font-semibold text-neutral-900 dark:text-neutral-50 tabular-nums">{totalContacts}</p>
-        </div>
-        <div class="px-2 py-3 text-center">
-          <p class="text-[10px] text-neutral-500 dark:text-neutral-400 uppercase tracking-wider font-medium mb-1">Activities</p>
+        </a>
+        <a href="{base}/activities" class="px-2 py-3 text-center active:bg-neutral-50 dark:active:bg-neutral-800/60">
+          <p class="text-[10px] text-neutral-500 dark:text-neutral-400 uppercase tracking-wider font-medium mb-1 flex items-center justify-center gap-0.5">
+            Activities
+            <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" class="text-accent dark:text-accent-dark shrink-0"><path d="m9 18 6-6-6-6"/></svg>
+          </p>
           <p class="text-xl font-semibold text-neutral-900 dark:text-neutral-50 tabular-nums">{totalActivities}</p>
-        </div>
-        <div class="px-2 py-3 text-center">
-          <p class="text-[10px] text-neutral-500 dark:text-neutral-400 uppercase tracking-wider font-medium mb-1">Team</p>
+        </a>
+        <a href="{base}/admin/team" class="px-2 py-3 text-center active:bg-neutral-50 dark:active:bg-neutral-800/60">
+          <p class="text-[10px] text-neutral-500 dark:text-neutral-400 uppercase tracking-wider font-medium mb-1 flex items-center justify-center gap-0.5">
+            Team
+            <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" class="text-accent dark:text-accent-dark shrink-0"><path d="m9 18 6-6-6-6"/></svg>
+          </p>
           <p class="text-xl font-semibold text-neutral-900 dark:text-neutral-50 tabular-nums">{totalUsers}</p>
-        </div>
+        </a>
       </div>
       <div class="hidden sm:grid sm:grid-cols-3 gap-4 mb-6">
-        <div class="card p-5">
+        <a href="{base}/rolodex" class="card p-5 group hover:border-accent/40 dark:hover:border-accent-dark/40 transition-colors">
           <p class="text-xs text-neutral-500 dark:text-neutral-400 uppercase tracking-wider font-medium mb-2">Total Contacts</p>
           <p class="text-3xl font-semibold text-neutral-900 dark:text-neutral-50 tabular-nums">{totalContacts}</p>
-        </div>
-        <div class="card p-5">
+          <p class="mt-3 text-xs font-medium text-accent dark:text-accent-dark flex items-center gap-1">
+            Browse the rolodex
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" class="transition-transform group-hover:translate-x-0.5"><path d="M5 12h14M13 6l6 6-6 6"/></svg>
+          </p>
+        </a>
+        <a href="{base}/activities" class="card p-5 group hover:border-accent/40 dark:hover:border-accent-dark/40 transition-colors">
           <p class="text-xs text-neutral-500 dark:text-neutral-400 uppercase tracking-wider font-medium mb-2">Activities Logged</p>
           <p class="text-3xl font-semibold text-neutral-900 dark:text-neutral-50 tabular-nums">{totalActivities}</p>
-        </div>
-        <div class="card p-5">
+          <p class="mt-3 text-xs font-medium text-accent dark:text-accent-dark flex items-center gap-1">
+            View the feed
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" class="transition-transform group-hover:translate-x-0.5"><path d="M5 12h14M13 6l6 6-6 6"/></svg>
+          </p>
+        </a>
+        <a href="{base}/admin/team" class="card p-5 group hover:border-accent/40 dark:hover:border-accent-dark/40 transition-colors">
           <p class="text-xs text-neutral-500 dark:text-neutral-400 uppercase tracking-wider font-medium mb-2">Team Members</p>
           <p class="text-3xl font-semibold text-neutral-900 dark:text-neutral-50 tabular-nums">{totalUsers}</p>
-        </div>
+          <p class="mt-3 text-xs font-medium text-accent dark:text-accent-dark flex items-center gap-1">
+            Manage the team
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" class="transition-transform group-hover:translate-x-0.5"><path d="M5 12h14M13 6l6 6-6 6"/></svg>
+          </p>
+        </a>
       </div>
 
       <div class="grid grid-cols-1 lg:grid-cols-5 gap-5">

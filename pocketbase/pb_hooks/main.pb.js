@@ -44,6 +44,17 @@ onRecordAuthWithOAuth2Request((e) => {
     if (!email.endsWith("@fossunited.org")) {
         throw new ForbiddenError("Only @fossunited.org accounts are permitted.");
     }
+    // A member who has left is disabled, not deleted, so their name stays on
+    // everything they contributed. Google must not let them back in.
+    let existing = null;
+    try {
+        existing = e.app.findAuthRecordByEmail("users", email);
+    } catch (_) {
+        existing = null; // first sign-in — no record yet
+    }
+    if (existing && existing.getBool("disabled")) {
+        throw new ForbiddenError("This account no longer has access to Rolodex.");
+    }
     e.next();
 }, "users");
 
@@ -52,6 +63,19 @@ onRecordAuthWithPasswordRequest((e) => {
     const identity = String(e.identity ?? "");
     if (!identity.endsWith("@fossunited.org")) {
         throw new ForbiddenError("Only @fossunited.org accounts are permitted.");
+    }
+    // e.record can be unset at this point, so look the member up by email
+    // rather than trusting it to be there.
+    let rec = e.record;
+    if (!rec) {
+        try {
+            rec = e.app.findAuthRecordByEmail("users", identity);
+        } catch (_) {
+            rec = null; // unknown identity — let the normal auth failure answer
+        }
+    }
+    if (rec && rec.getBool("disabled")) {
+        throw new ForbiddenError("This account no longer has access to Rolodex.");
     }
     e.next();
 }, "users");
@@ -66,18 +90,68 @@ onRecordCreateRequest((e) => {
     e.next();
 }, "users");
 
-// Lock the `role` field on user updates. The users collection has no custom
-// updateRule, so it defaults to "id = @request.auth.id" — i.e. any user can
-// PATCH their own record. `role` is a plain writable field, so without this
-// guard a user could set role:"admin" and self-escalate. Only superusers
-// (the PocketBase admin UI) may change a role; for everyone else we revert
-// it to the stored value regardless of what the client sends.
+// Team management guardrails on user updates.
+//
+// updateRule lets a member edit their own record and an admin edit anyone's, so
+// the field-level rules live here:
+//
+//   - only an admin may change `role` or `disabled`. For anyone else both are
+//     reverted to their stored values — they are plain writable fields, so a
+//     member could otherwise PATCH role:"admin" onto themselves and escalate.
+//   - an admin may not change their own role or access. Demotion is someone
+//     else's decision, and it rules out locking yourself out by accident.
+//   - the last active admin can be neither demoted nor disabled, so the team
+//     can never end up with nobody able to manage it.
+//   - disabling refuses sign-in here, and the collection's authRule refuses
+//     token refresh, so the app logs them out on their next load (lib/pb.ts
+//     clears the auth store when authRefresh fails). A raw token already in
+//     hand still works for direct API calls until it expires — measured on
+//     0.39.1, neither authRule nor refreshTokenKey() invalidates one.
+//
+// Superusers (the PocketBase dashboard) bypass all of it — that is the recovery
+// path if the rules above ever paint someone into a corner.
 onRecordUpdateRequest((e) => {
-    const isSuperuser = e.auth && e.auth.collection().name === "_superusers";
-    if (!isSuperuser) {
-        const original = e.app.findRecordById("users", e.record.id);
-        e.record.set("role", original.get("role"));
+    if (e.auth && e.auth.collection().name === "_superusers") {
+        e.next();
+        return;
     }
+
+    const original = e.app.findRecordById("users", e.record.id);
+    const isAdmin = !!(e.auth && e.auth.get("role") === "admin");
+    const isSelf = !!(e.auth && e.auth.id === e.record.id);
+
+    const wasRole = original.getString("role");
+    const nowRole = e.record.getString("role");
+    const wasDisabled = original.getBool("disabled");
+    const nowDisabled = e.record.getBool("disabled");
+    const roleChanged = nowRole !== wasRole;
+    const accessChanged = nowDisabled !== wasDisabled;
+
+    if (!isAdmin) {
+        e.record.set("role", wasRole);
+        e.record.set("disabled", wasDisabled);
+        e.next();
+        return;
+    }
+
+    if (isSelf && (roleChanged || accessChanged)) {
+        throw new BadRequestError("You can't change your own role or access — ask another admin.");
+    }
+
+    const losesAdmin = wasRole === "admin" && !wasDisabled &&
+        ((roleChanged && nowRole !== "admin") || (accessChanged && nowDisabled));
+    if (losesAdmin) {
+        const others = e.app.findRecordsByFilter(
+            "users",
+            "role = 'admin' && disabled != true && id != {:id}",
+            "", 2, 0,
+            { id: e.record.id },
+        );
+        if (!others.length) {
+            throw new BadRequestError("Rolodex needs at least one active admin. Promote someone else first.");
+        }
+    }
+
     e.next();
 }, "users");
 
@@ -284,3 +358,30 @@ onRecordUpdateRequest((e) => {
 
     e.next();
 }, "contacts");
+
+// Send a member their set-password email, on an admin's behalf.
+//
+// A custom route because `emailVisibility` is false on every user record: an
+// admin listing the team sees names and roles but not addresses, and the SDK's
+// requestPasswordReset() needs the address. Rather than widening email
+// visibility for every signed-in member just to power this button, the lookup
+// happens here, where the caller is checked to be an admin first.
+routerAdd("POST", "/api/team/send-password-reset", (e) => {
+    const auth = e.auth;
+    if (!auth || auth.collection().name !== "users" || auth.get("role") !== "admin") {
+        throw new ForbiddenError("Only an admin can send a password email.");
+    }
+
+    const body = new DynamicModel({ member: "" });
+    e.bindBody(body);
+
+    let member;
+    try {
+        member = e.app.findRecordById("users", String(body.member || ""));
+    } catch (_) {
+        throw new NotFoundError("No such team member.");
+    }
+
+    $mails.sendRecordPasswordReset(e.app, member);
+    return e.json(200, { sent: true });
+});

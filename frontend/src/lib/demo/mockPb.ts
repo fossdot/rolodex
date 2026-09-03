@@ -285,6 +285,11 @@ function formToObject(data: unknown): Rec {
 }
 
 // ── The mock client ──────────────────────────────────────────────────────────
+/** The failure shape the app reads: `reason()` looks at response.message. */
+function fail(message: string, status = 400) {
+  return { status, message, response: { message } };
+}
+
 class Collection {
   constructor(private name: string, private db: Db, private auth: AuthStore) {}
 
@@ -334,6 +339,9 @@ class Collection {
       if (existing >= 0) this.all().splice(existing, 1);
     }
     if (this.name === 'contacts') { rec.deleted_at = rec.deleted_at || ''; rec.deleted_by = rec.deleted_by || ''; }
+    if (this.name === 'users' && this.auth.record?.role !== 'admin') {
+      throw fail('Only an admin can add a team member.');
+    }
     this.all().push(rec);
     return { ...rec } as unknown as T;
   }
@@ -341,7 +349,31 @@ class Collection {
   async update<T = Rec>(id: string, data: unknown): Promise<T> {
     const rec = this.all().find((r) => r.id === id);
     if (!rec) throw { status: 404, message: 'Not found', response: { message: 'Not found' } };
-    Object.assign(rec, formToObject(data), { updated: new Date().toISOString() });
+    const patch = formToObject(data) as Rec;
+
+    // Mirror the team guardrails in pb_hooks/main.pb.js, so the demo teaches
+    // the real rules instead of letting anything through.
+    if (this.name === 'users') {
+      const me = this.auth.record;
+      const isSelf = me?.id === id;
+      const roleChanged = 'role' in patch && patch.role !== rec.role;
+      const accessChanged = 'disabled' in patch && !!patch.disabled !== !!rec.disabled;
+      if (me?.role !== 'admin') {
+        delete patch.role;
+        delete patch.disabled;
+      } else if (isSelf && (roleChanged || accessChanged)) {
+        throw fail("You can't change your own role or access — ask another admin.");
+      } else if (roleChanged || accessChanged) {
+        const losesAdmin = rec.role === 'admin' && !rec.disabled &&
+          ((roleChanged && patch.role !== 'admin') || (accessChanged && !!patch.disabled));
+        const otherAdmins = this.all().filter((u) => u.id !== id && u.role === 'admin' && !u.disabled);
+        if (losesAdmin && !otherAdmins.length) {
+          throw fail('Rolodex needs at least one active admin. Promote someone else first.');
+        }
+      }
+    }
+
+    Object.assign(rec, patch, { updated: new Date().toISOString() });
     return { ...rec } as unknown as T;
   }
 
@@ -395,5 +427,13 @@ export function createDemoPb() {
     files: { getURL() { return ''; } }, // demo contacts have no photos → Avatar shows initials
     collection(name: string) { return new Collection(name, db, authStore); },
     filter(raw: string) { return raw; },
+    // Custom hook routes the app calls directly. Only the team one exists.
+    async send(path: string, _opts: unknown) {
+      if (path === '/api/team/send-password-reset') {
+        if (authStore.record?.role !== 'admin') throw fail('Only an admin can send a password email.', 403);
+        return { sent: true };
+      }
+      throw fail(`No demo handler for ${path}`, 404);
+    },
   };
 }

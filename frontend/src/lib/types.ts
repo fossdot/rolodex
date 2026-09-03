@@ -6,6 +6,13 @@ export interface User {
   avatar: string;
   created: string;
   updated: string;
+  /**
+   * A member who has left. They can't sign in, but their name stays on every
+   * contact and activity they added — unlike a deleted account, which would
+   * blank that attribution. Set from /admin/team; see the guardrails in
+   * pb_hooks/main.pb.js.
+   */
+  disabled?: boolean;
 }
 
 export interface Organisation {

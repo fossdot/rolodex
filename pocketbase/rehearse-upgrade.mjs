@@ -40,6 +40,7 @@ const EXPECTED_ADDED = {
   contacts: ['orgs', 'org_designations'],
   activities: ['contacts', 'contact_roles'],
   reminders: ['cc', 'cc_emails'],
+  users: ['disabled'],
 };
 
 if (!['before', 'after'].includes(phase) || !email || !password) {

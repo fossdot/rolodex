@@ -155,7 +155,15 @@
         mfaId = id;
         await startOtpStep(email);
       } else {
-        error = 'Invalid email or password.';
+        // A 403 is one of our own refusals — the account's access has been
+        // removed, or the address isn't @fossunited.org — and saying so beats
+        // sending someone off to re-type a password that was right. Anything
+        // else stays vague, so a wrong password still doesn't reveal whether
+        // the account exists.
+        const err = e as { status?: number; response?: { message?: string } };
+        error = err?.status === 403 && err.response?.message
+          ? err.response.message
+          : 'Invalid email or password.';
       }
     } finally {
       loading = false;

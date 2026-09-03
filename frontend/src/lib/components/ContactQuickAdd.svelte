@@ -16,6 +16,7 @@
   import type { Contact, Organisation } from '$lib/types';
   import CityInput from './CityInput.svelte';
   import OrgsInput from './OrgsInput.svelte';
+  import DuplicateHint from './DuplicateHint.svelte';
   import MultiSelect from './MultiSelect.svelte';
   import RichTextEditor from './RichTextEditor.svelte';
   import { sanitizeHtml, htmlToText } from '$lib/sanitizeHtml';
@@ -24,7 +25,7 @@
   /** Pre-fills the name field from whatever was typed in the contact search. */
   export let initialName = '';
 
-  const dispatch = createEventDispatcher<{ created: Contact; cancel: void }>();
+  const dispatch = createEventDispatcher<{ created: Contact; existing: Contact; cancel: void }>();
 
   let name = '';
   let orgs: string[] = [];
@@ -137,6 +138,13 @@
     dispatch('cancel');
   }
 
+  // The person typed in is already in the Rolodex (issue #27): hand that record
+  // back instead of creating a double. Nothing is saved.
+  function useExisting(e: CustomEvent<Contact>) {
+    open = false;
+    dispatch('existing', e.detail);
+  }
+
   function onKeydown(e: KeyboardEvent) {
     if (e.key === 'Escape' && open) cancel();
   }
@@ -178,6 +186,9 @@
         <div class="sm:col-span-2">
           <label for="qa-org" class="label">Organisation</label>
           <OrgsInput id="qa-org" bind:value={orgs} bind:designations={orgDesignations} suggestions={orgSuggestions} extraClass={errors.identity ? 'ring-2 ring-red-400' : ''} />
+        </div>
+        <div class="sm:col-span-2">
+          <DuplicateHint {name} {email} {mobile} pickLabel="Use this contact" on:pick={useExisting} />
         </div>
 
         <div class="sm:col-span-2">

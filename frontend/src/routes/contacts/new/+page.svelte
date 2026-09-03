@@ -7,6 +7,7 @@
   import { FU_ROLES, TOPICS, COUNTRIES } from '$lib/constants';
   import CityInput from '$lib/components/CityInput.svelte';
   import OrgsInput from '$lib/components/OrgsInput.svelte';
+  import DuplicateHint from '$lib/components/DuplicateHint.svelte';
   import MultiSelect from '$lib/components/MultiSelect.svelte';
   import RichTextEditor from '$lib/components/RichTextEditor.svelte';
   import { sanitizeHtml, htmlToText } from '$lib/sanitizeHtml';
@@ -164,6 +165,9 @@
           <input id="designation" type="text" bind:value={designation} class="input" placeholder="Software Engineer" />
         </div>
       </div>
+      <!-- Someone this could be a second copy of (issue #27). Watches the
+           email and mobile below too, since a misspelt name still shares those. -->
+      <DuplicateHint {name} {email} {mobile} />
     </div>
 
     <!-- Contact details -->

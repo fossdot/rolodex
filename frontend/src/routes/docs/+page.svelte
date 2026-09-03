@@ -80,6 +80,13 @@
           <li><strong>Topics</strong> — their areas of interest or expertise.</li>
         </ul>
         <p>You can also add a photo, LinkedIn, location, and secondary contact details.</p>
+        <p>
+          As you type, Rolodex checks whether the person is already here. If a name, email or mobile looks like
+          an existing contact, an <strong>Already in the Rolodex?</strong> box lists them — open the profile to
+          compare, or, when you're adding someone from the Log Activity screen, choose <strong>Use this
+          contact</strong> to pick them instead of creating a second copy. It's a hint, not a block: two people
+          can share a name, so you can still save.
+        </p>
 
         <h3>Viewing &amp; editing</h3>
         <p>

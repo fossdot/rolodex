@@ -8,7 +8,7 @@
 
 import { participantRoleLabel } from './constants';
 import { contactLabel } from './org';
-import type { Activity, Contact } from './types';
+import type { Activity, Contact, User } from './types';
 
 /** Just enough of an Activity to read roles off. */
 type WithRoles = { contact_roles?: Record<string, string> };
@@ -43,6 +43,43 @@ export function participantLine(activity: (WithRoles & { expand?: { contacts?: C
 /** Participants other than the given contact — for "with …" on their timeline. */
 export function otherParticipants(activity: Activity, contactId: string): Contact[] {
   return (activity.expand?.contacts ?? []).filter((c) => c.id !== contactId);
+}
+
+// ── team members (issue #26) ─────────────────────────────────────────────────
+// Besides `logged_by`, an activity can name the other FOSS United members who
+// were part of it. Four screens show that as "by <logger> · with <team>"; they
+// all go through here, like participants above.
+
+/** Just enough of an Activity to read its team off. */
+type WithTeam = { logged_by?: string; team?: string[]; expand?: { logged_by?: User; team?: User[] } };
+
+/** A member's display name — their name, else their email. */
+export function userLabel(u: Pick<User, 'name' | 'email'> | null | undefined): string {
+  return u?.name || u?.email || 'Unknown';
+}
+
+/** The other members tagged on an activity. Empty when none, or when a query forgot `expand: 'team'`. */
+export function teamMembers(a: WithTeam | null | undefined): User[] {
+  return (a?.expand?.team ?? []).filter(Boolean);
+}
+
+/** "Rahul Verma, Sneha Iyer" — the tagged members on one line; '' when none. */
+export function teamLine(a: WithTeam | null | undefined, sep = ', '): string {
+  return teamMembers(a).map(userLabel).join(sep);
+}
+
+/** Everyone from the team on an activity: whoever logged it first, then anyone tagged. */
+export function staffOn(a: WithTeam | null | undefined): User[] {
+  const out: User[] = [];
+  if (a?.expand?.logged_by) out.push(a.expand.logged_by);
+  out.push(...teamMembers(a));
+  return out;
+}
+
+/** Was this member part of the activity — as its logger, or tagged on it? Works off ids, so no expand needed. */
+export function involves(a: WithTeam | null | undefined, userId: string): boolean {
+  if (!a || !userId) return false;
+  return a.logged_by === userId || (a.team ?? []).includes(userId);
 }
 
 /**

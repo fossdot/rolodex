@@ -213,8 +213,17 @@ onRecordUpdateRequest((e) => {
     const isNowDeleted = e.record.getString("deleted_at") !== "";
 
     if (!wasDeleted && isNowDeleted) {
-        // Soft delete. The updateRule already limits this to the activity's
-        // logger or an admin; stamp who did it rather than trust the client.
+        // Soft delete. The updateRule also admits members tagged on the
+        // activity (issue #26) so they can correct an entry they were part of,
+        // but deleting it stays with whoever logged it, or an admin. The rule
+        // cannot tell the two kinds of update apart, so it is decided here.
+        const isSuperuser = e.auth && e.auth.collection().name === "_superusers";
+        const isLogger = e.auth && e.auth.id === original.getString("logged_by");
+        const isAdmin = e.auth && e.auth.getString("role") === "admin";
+        if (!isSuperuser && !isLogger && !isAdmin) {
+            throw new ForbiddenError("Only whoever logged this activity, or an admin, can delete it.");
+        }
+        // Stamp who did it rather than trust the client.
         e.record.set("deleted_by", e.auth ? e.auth.id : "");
 
         // Pending follow-ups on a deleted activity would email everyone about
@@ -267,8 +276,11 @@ onRecordUpdateRequest((e) => {
     }
 
     // Roles follow the participant list — a dropped participant loses theirs.
-    const { normaliseContactRoles } = require(`${__hooks}/utils.js`);
+    const { normaliseContactRoles, normaliseTeam } = require(`${__hooks}/utils.js`);
     normaliseContactRoles(e.record);
+    // Tagged team members are content too (issue #26) — a tagged member or the
+    // logger can add whoever was missed. The logger is never among them.
+    normaliseTeam(e.record);
 
     e.next();
 }, "activities");
@@ -277,13 +289,47 @@ onRecordUpdateRequest((e) => {
 // "required" on a relation without also forcing it on every partial update, so
 // it is checked here on the way in.
 onRecordCreateRequest((e) => {
-    const { normaliseContactRoles } = require(`${__hooks}/utils.js`);
+    const { normaliseContactRoles, normaliseTeam } = require(`${__hooks}/utils.js`);
     const ids = e.record.get("contacts");
     if (!Array.isArray(ids) || ids.length === 0) {
         throw new BadRequestError("An activity needs at least one contact.");
     }
     normaliseContactRoles(e.record);
+    // Other members who were part of it (issue #26); the logger — already
+    // forced to the caller above — is stripped from the list.
+    normaliseTeam(e.record);
     e.next();
+}, "activities");
+
+// Tell the members newly tagged on an activity (issue #26). These run after the
+// validation hooks above, and call `e.next()` *first*, so by the time the email
+// is built the row is saved; the send is best-effort — a mail failure is logged
+// and never surfaces as a failed save. One message goes to everyone added.
+onRecordCreateRequest((e) => {
+    const { relationIds, notifyTaggedMembers } = require(`${__hooks}/utils.js`);
+    e.next();
+    try {
+        notifyTaggedMembers(e.app, e.record, e.auth, relationIds(e.record, "team"));
+    } catch (err) {
+        e.app.logger().warn("Could not notify tagged team members", "activity", e.record.id, "error", String(err));
+    }
+}, "activities");
+
+onRecordUpdateRequest((e) => {
+    const { relationIds, notifyTaggedMembers } = require(`${__hooks}/utils.js`);
+    // Who was on it already — read from the database before the save, since
+    // e.record is the merged (original + request) state by this point.
+    const before = {};
+    try {
+        for (const id of relationIds(e.app.findRecordById("activities", e.record.id), "team")) before[id] = true;
+    } catch (err) { /* unreadable original: treat everyone as newly tagged */ }
+    e.next();
+    try {
+        const added = relationIds(e.record, "team").filter((id) => !before[id]);
+        notifyTaggedMembers(e.app, e.record, e.auth, added);
+    } catch (err) {
+        e.app.logger().warn("Could not notify tagged team members", "activity", e.record.id, "error", String(err));
+    }
 }, "activities");
 
 // Force editor = authenticated user on contact edit-log entries.

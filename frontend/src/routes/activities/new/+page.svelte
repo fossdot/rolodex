@@ -69,6 +69,7 @@
     event_link: string;
     date: string;
     notes: string;
+    team: string[];
   };
 
   async function save(e: CustomEvent<ActivityDraft>) {
@@ -87,6 +88,9 @@
         event_link: d.event_link,
         date: d.date,
         notes: d.notes,
+        // Colleagues who were also there (issue #26); the server drops the
+        // logger from the list and emails whoever is newly tagged.
+        team: d.team,
         logged_by: $currentUser?.id,
       });
 

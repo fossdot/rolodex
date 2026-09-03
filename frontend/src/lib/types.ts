@@ -129,6 +129,13 @@ export interface Activity {
    * in `contacts` and rejects unknown roles.
    */
   contact_roles: Record<string, string>;
+  /**
+   * Other FOSS United members who were part of this activity (issue #26) — ids
+   * into `users`. Whoever logged it (`logged_by`) is never listed here; the
+   * hooks strip them. Tagged members are emailed once, may edit the activity,
+   * count as "engaged" with its contacts, and do not score for it.
+   */
+  team: string[];
   activity_type: string;
   event_name: string;
   event_link: string;
@@ -140,6 +147,7 @@ export interface Activity {
   expand?: {
     logged_by?: User;
     contacts?: Contact[];
+    team?: User[];
     deleted_by?: User;
   };
   created: string;

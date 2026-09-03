@@ -34,11 +34,14 @@
     try {
       const filters: string[] = ['deleted_at = null'];
       if (scope === 'mine' && $currentUser?.id) {
-        // Contacts I added OR have engaged with (logged an activity on) —
-        // activities_via_contact is PocketBase's back-relation from contacts
-        // to activities; ?= matches if ANY of the related rows' logged_by is me.
+        // Contacts I added OR have engaged with — logged an activity on, or was
+        // tagged on one (issue #26). activities_via_contacts is PocketBase's
+        // back-relation from contacts to activities; ?= matches if ANY of the
+        // related rows qualifies. `team` is a multi-relation, so membership is
+        // `team.id ?=` — the bare `team ?=` form matches nothing.
+        const me = $currentUser.id;
         filters.push(
-          `(added_by = '${$currentUser.id}' || activities_via_contacts.logged_by ?= '${$currentUser.id}')`
+          `(added_by = '${me}' || activities_via_contacts.logged_by ?= '${me}' || activities_via_contacts.team.id ?= '${me}')`
         );
       }
       if (search.trim()) {

@@ -121,6 +121,14 @@ Sidebar nav lives in `lib/components/Sidebar.svelte` (reused for the mobile draw
 
 Auth redirect logic lives in `+layout.svelte`: unauthenticated users are sent to `/login`; authenticated users on `/login` are sent to `/contacts`. The root `/` page redirects immediately based on auth state.
 
+**Team members on an activity (`activities.team`, issue #26).** A multi-relation to `users` for the *other* FOSS United members who were part of an activity; `logged_by` stays the single attribution. Membership filters are `team.id ?= '<id>'` (the bare `team ?=` form matches nothing, as with `contacts`), and the "my contacts" scope reaches it through the back-relation as `activities_via_contacts.team.id ?= '<id>'`. Who may do what splits three ways, and the split is deliberate:
+
+- **Edit** — `updateRule` admits the logger, anyone tagged, or an admin, so a tagged member can correct an entry they were part of. `canEditActivity` on the contact page mirrors it via `involves()` in `lib/activity.ts`.
+- **Delete** — soft-delete is narrower: logger or admin only. The rule cannot tell an edit from a soft-delete, so `pb_hooks/main.pb.js` checks it on the `deleted_at` transition and answers 403 otherwise; `canDeleteActivity` gates the button.
+- **Score** — tagged members do not score. The leaderboard counts `logged_by` alone, or it would reward tagging everyone.
+
+`normaliseTeam` in `utils.js` strips the logger from `team` on every write (they are on it by definition). Newly tagged members are emailed once, in a second create/update handler that calls `e.next()` *first* and then `notifyTaggedMembers` — after the row is saved, best-effort, so a mail failure is logged and never fails the write. Rendering is "by &lt;logger&gt; · with &lt;team&gt;" on all four activity screens via `teamLine`, and the "Engaged by" strips use `staffOn` so a tagged member counts as engaged. Every activity query that shows this needs `expand: '…,team'`.
+
 **Team management (`/admin/team`, admin only).** The three dashboard tiles are links — contacts to `/rolodex`, activities to `/activities`, team to this screen. Roles, invites and access all run through the `users` collection rather than the PocketBase dashboard, so the rules matter:
 
 - `createRule` is `@request.auth.role = 'admin'` — it used to be `""`, which let anyone on the internet create an account (the email-domain hook checks the string, not ownership). Google's first-sign-in creation is internal to the OAuth flow and bypasses this, which is why *its* domain check needs its own hook.
@@ -132,7 +140,7 @@ Two things PocketBase will not let an admin do, both worked around rather than f
 
 **Styling:** Tailwind CSS v3 with `darkMode: 'class'`. Custom utility classes (`.btn-primary`, `.btn-secondary`, `.btn-ghost`, `.btn-danger`, `.input`, `.label`, `.card`, `.badge-green`, `.badge-neutral`) are defined in `src/app.css`. The accent colour is `#278F5E` (light) / `#30A66D` (dark), exposed as `bg-accent` / `bg-accent-dark` via `tailwind.config.js`.
 
-**Scoring formula (admin dashboard):** `contacts_added × 1 + activities_logged × 2 = score`. This is computed client-side by querying PocketBase per user; it is not stored. Note that one activity covering several contacts scores **once**, not once per participant.
+**Scoring formula (admin dashboard):** `contacts_added × 1 + activities_logged × 2 = score`. This is computed client-side by querying PocketBase per user; it is not stored. Note that one activity covering several contacts scores **once**, not once per participant — and only for `logged_by`, never for the members tagged in `team`.
 
 ## Environment
 

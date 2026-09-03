@@ -8,7 +8,7 @@
   import { ACTIVITY_TYPES } from '$lib/constants';
   import Avatar from '$lib/components/Avatar.svelte';
   import { contactLabel, primaryOrg } from '$lib/org';
-  import { participantLine, primaryParticipantId } from '$lib/activity';
+  import { participantLine, primaryParticipantId, teamLine } from '$lib/activity';
 
   let loading = true;
 
@@ -142,7 +142,7 @@
         pb.collection('users').getList<User>(1, 200),
         pb.collection('activities').getList<Activity>(1, 15, {
           sort: '-date,-created',
-          expand: 'logged_by,contacts.orgs',
+          expand: 'logged_by,contacts.orgs,team',
           filter: withRange('deleted_at = null', aRange),
         }),
       ]);
@@ -160,6 +160,8 @@
             pb.collection('contacts').getList(1, 1, {
               filter: withRange(`added_by = '${u.id}' && deleted_at = null`, cRange),
             }),
+            // Only the logger scores. Members tagged on an activity (issue #26)
+            // get nothing for it, or the board would reward tagging everyone.
             pb.collection('activities').getList(1, 1, {
               filter: withRange(`logged_by = '${u.id}' && deleted_at = null`, aRange),
             }),
@@ -451,7 +453,7 @@
                       <p class="text-xs text-neutral-400 dark:text-neutral-500 truncate">{act.event_name}</p>
                     {/if}
                     <p class="text-[11px] text-neutral-400 dark:text-neutral-500 mt-0.5">
-                      {act.expand?.logged_by?.name || act.expand?.logged_by?.email || 'Unknown'} · {formatDate(act.date)}
+                      {act.expand?.logged_by?.name || act.expand?.logged_by?.email || 'Unknown'}{#if teamLine(act)}{' · with '}{teamLine(act)}{/if} · {formatDate(act.date)}
                     </p>
                   </div>
                 </div>

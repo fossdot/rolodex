@@ -91,11 +91,14 @@ let aId = 0;
 const a = (
   contact: string | string[], type: string, event: string, date: string, notes: string, logged_by: string,
   // Optional part-per-participant, keyed by contact id — "who spoke, who sponsored".
-  contact_roles: Record<string, string> = {}
+  contact_roles: Record<string, string> = {},
+  // Other team members who were part of it (issue #26) — never the logger.
+  team: string[] = []
 ): Rec => ({
   id: `a_${++aId}`,
   contacts: Array.isArray(contact) ? contact : [contact],
   contact_roles,
+  team,
   activity_type: type, event_name: event, event_link: '',
   date, notes: `<p>${notes}</p>`, logged_by,
   deleted_at: '', deleted_by: '',
@@ -106,11 +109,13 @@ export const DEMO_ACTIVITIES: Rec[] = [
   // One shared activity covering everyone who was involved (issue #6) — logged
   // once rather than repeated under each contact.
   a(['c_ananya', 'c_dev', 'c_fatima', 'c_rohit'], 'attended_event', 'Open Source Summit 2026', '2026-05-14', 'Ananya keynoted, Dev sponsored the venue, Fatima ran the systemd track and Rohit volunteered on registrations.', 'u_admin',
-    { c_ananya: 'speaker', c_dev: 'sponsor', c_fatima: 'organiser', c_rohit: 'volunteer' }),
+    { c_ananya: 'speaker', c_dev: 'sponsor', c_fatima: 'organiser', c_rohit: 'volunteer' },
+    // Three of the team were there; logged once, with the others tagged (issue #26).
+    ['u_rahul', 'u_sneha']),
   a('c_ananya', 'spoke_at_event', 'IndiaFOSS 2025', '2025-09-20', 'Delivered the AI/ML keynote — packed room, great Q&A.', 'u_admin'),
   a('c_ananya', 'mentored_hackathon', 'FOSS Hack 2025', '2025-12-13', 'Mentored two student teams on ML tooling.', 'u_rahul'),
   a('c_dev', 'sponsored_event', 'FOSS Hack 2025', '2025-11-30', 'Zerodha confirmed gold-tier sponsorship.', 'u_rahul'),
-  a('c_dev', 'networking_call', 'Sponsor sync', '2026-02-12', 'Discussed sponsoring the 2026 city meetups.', 'u_admin'),
+  a('c_dev', 'networking_call', 'Sponsor sync', '2026-02-12', 'Discussed sponsoring the 2026 city meetups.', 'u_admin', {}, ['u_rahul']),
   a('c_meera', 'hosted_meetup', 'Kochi FOSS Meetup', '2025-10-11', 'Hosted 40+ attendees; lightning talks went well.', 'u_sneha'),
   a('c_meera', 'hosted_meetup', 'Kochi FOSS Meetup', '2026-01-17', 'Second edition — partnered with a local college.', 'u_sneha'),
   a('c_arjun', 'established_foss_club', 'NIT Warangal', '2025-10-25', 'Launched the campus FOSS club with 30 members.', 'u_karthik'),
@@ -121,7 +126,7 @@ export const DEMO_ACTIVITIES: Rec[] = [
   a('c_priya', 'volunteered', 'Chennai Meetup', '2025-12-02', 'Designed event posters and signage.', 'u_sneha'),
   a('c_sameer', 'judged_project', 'FOSS Hack 2025', '2025-12-14', 'Judged the hardware track; thoughtful feedback.', 'u_karthik'),
   a('c_lakshmi', 'spoke_at_event', 'ML Repro Workshop', '2025-12-22', 'Presented on reproducible ML pipelines.', 'u_admin'),
-  a('c_imran', 'reviewed_grant', 'FOSS Grants Q4', '2026-01-10', 'Reviewed 6 grant applications.', 'u_rahul'),
+  a('c_imran', 'reviewed_grant', 'FOSS Grants Q4', '2026-01-10', 'Reviewed 6 grant applications.', 'u_rahul', {}, ['u_admin', 'u_karthik']),
   a('c_nisha', 'panel_discussion', 'Open Data Policy Panel', '2026-01-24', 'Spoke on open government data standards.', 'u_sneha'),
   a('c_rohit', 'contributed_oss', 'FOSS Hack 2025', '2026-02-06', 'Merged a sizeable patch into the event platform.', 'u_karthik'),
   a('c_anjali', 'networking_call', 'Kerala IT dept', '2026-02-20', 'Discussed state-level FOSS adoption.', 'u_admin'),
@@ -172,7 +177,7 @@ export const DEMO_ORGS: Rec[] = [...orgRegistry.values()].map((o) => ({
 
 export function freshDb(): Record<string, Rec[]> {
   // deep-ish clone so the demo can mutate freely and a reload resets it
-  const clone = (arr: Rec[]) => arr.map((x) => ({ ...x, fu_roles: Array.isArray(x.fu_roles) ? [...(x.fu_roles as string[])] : x.fu_roles, topics: Array.isArray(x.topics) ? [...(x.topics as string[])] : x.topics, orgs: Array.isArray(x.orgs) ? [...(x.orgs as string[])] : x.orgs, contacts: Array.isArray(x.contacts) ? [...(x.contacts as string[])] : x.contacts, contact_roles: x.contact_roles ? { ...(x.contact_roles as object) } : x.contact_roles, org_designations: x.org_designations ? { ...(x.org_designations as object) } : x.org_designations, changes: Array.isArray(x.changes) ? (x.changes as unknown[]).map((ch) => ({ ...(ch as object) })) : x.changes }));
+  const clone = (arr: Rec[]) => arr.map((x) => ({ ...x, fu_roles: Array.isArray(x.fu_roles) ? [...(x.fu_roles as string[])] : x.fu_roles, topics: Array.isArray(x.topics) ? [...(x.topics as string[])] : x.topics, orgs: Array.isArray(x.orgs) ? [...(x.orgs as string[])] : x.orgs, contacts: Array.isArray(x.contacts) ? [...(x.contacts as string[])] : x.contacts, team: Array.isArray(x.team) ? [...(x.team as string[])] : x.team, contact_roles: x.contact_roles ? { ...(x.contact_roles as object) } : x.contact_roles, org_designations: x.org_designations ? { ...(x.org_designations as object) } : x.org_designations, changes: Array.isArray(x.changes) ? (x.changes as unknown[]).map((ch) => ({ ...(ch as object) })) : x.changes }));
   return {
     users: clone(DEMO_USERS),
     organisations: clone(DEMO_ORGS),

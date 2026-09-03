@@ -9,7 +9,7 @@
   import Reactions from '$lib/components/Reactions.svelte';
   import RichText from '$lib/components/RichText.svelte';
   import { contactLabel } from '$lib/org';
-  import { participantLabel, participantLine } from '$lib/activity';
+  import { participantLabel, participantLine, teamLine } from '$lib/activity';
 
   type Period = 'week' | 'month' | 'quarter' | 'year' | 'all' | 'custom';
   let period: Period = 'month';
@@ -21,7 +21,8 @@
   let loadSeq = 0; // drop a slow response if a newer load started
   let search = '';
 
-  // Admin-only: filter activities by the user who logged them
+  // Admin-only: filter activities by team member — the ones they logged, plus
+  // any they were tagged on (issue #26).
   let users: User[] = [];
   let filterUser = '';
   $: isAdmin = $currentUser?.role === 'admin';
@@ -72,7 +73,8 @@
       const filters = ['deleted_at = null'];
       if (startDate) filters.push(`date >= '${startDate}'`);
       if (endDate) filters.push(`date <= '${endDate} 23:59:59'`);
-      if (isAdmin && filterUser) filters.push(`logged_by = '${filterUser}'`);
+      // `team.id ?=` tests membership of the multi-relation; bare `team ?=` matches nothing.
+      if (isAdmin && filterUser) filters.push(`(logged_by = '${filterUser}' || team.id ?= '${filterUser}')`);
       if (search.trim()) {
         const q = search.trim().replace(/\\/g, '\\\\').replace(/'/g, "\\'");
         // contact.orgs is a multi-relation two hops out, so `?~` is what matches
@@ -88,7 +90,7 @@
         sort: '-date,-created',
         // contact.orgs is a nested expand — the contact's organisation names are
         // needed to label a row when the contact has no personal name.
-        expand: 'contacts.orgs,logged_by',
+        expand: 'contacts.orgs,logged_by,team',
         batch: 200,
       });
       if (seq !== loadSeq) return; // a newer load superseded this one
@@ -244,7 +246,7 @@
     </div>
     {#if isAdmin}
       <div>
-        <label for="filter-user" class="label">Logged by</label>
+        <label for="filter-user" class="label">Team member</label>
         <select id="filter-user" bind:value={filterUser} class="input w-full sm:w-auto sm:min-w-40">
           <option value="">All users</option>
           {#each users as u (u.id)}
@@ -358,7 +360,7 @@
                             </a>
                           {/each}
                           <span class="text-neutral-400 dark:text-neutral-500">
-                            logged by {act.expand?.logged_by?.name || act.expand?.logged_by?.email || 'Unknown'}
+                            logged by {act.expand?.logged_by?.name || act.expand?.logged_by?.email || 'Unknown'}{#if teamLine(act)}{' · with '}{teamLine(act)}{/if}
                           </span>
                         </div>
 
